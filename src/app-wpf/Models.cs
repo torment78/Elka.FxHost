@@ -613,7 +613,7 @@ internal sealed class FxHostSettings
     public bool NodeVuMetersEnabled { get; set; } = true;
     public List<EditorHotkeySnapshot> EditorHotkeys { get; set; } = [];
     public FloatingPanelSettings FloatingPanel { get; set; } = new();
-    public bool AdvancedModeEnabled { get; set; }
+    public bool AdvancedModeEnabled { get; set; } = true;
     public bool CheckStableUpdatesAutomatically { get; set; }
     public bool CheckBetaUpdatesAutomatically { get; set; }
     public bool StartupDelayEnabled { get; set; }

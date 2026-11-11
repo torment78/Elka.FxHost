@@ -10,14 +10,14 @@ prefix is now `MFX`.
 
 The command prefix is `MFX`.
 
-`Strip(...)` targets a node on the **FX In** side, and `Bus(...)` a node on the
-**FX Out** side. A number counts nodes from zero, top to bottom. A name such as
+There are no strips or buses. `In(...)` targets a node on the **FX In** side, and
+`Out(...)` a node on the **FX Out** side. A number counts nodes from zero, top to bottom. A name such as
 `A1`, `A1-A2` or `FX In A1` selects that node directly:
 
 ```text
-MFX.Strip(0)        first FX In node (FX In A1 when nothing is linked)
-MFX.Strip(A1-A2)    the linked FX In A1-A2 node
-MFX.Bus(A1)         FX Out A1
+MFX.In(0)           first FX In node (FX In A1 when nothing is linked)
+MFX.In(A1-A2)       the linked FX In A1-A2 node
+MFX.Out(A1)         FX Out A1
 ```
 
 Linked nodes count as one node, so the numbers move when you link or unlink.
@@ -126,108 +126,108 @@ Use the index shown by **Info** for that loaded VST. Parameter indexes are defin
 
 These commands work only when the plugin exposes a matching host parameter. Unsupported controls return an error and do not alter another parameter. Values use the plugin's displayed format. The wrapper verifies the plugin's text-to-value result and, when necessary, resolves numeric display values itself so a broken plugin conversion cannot silently jump to the minimum value. `MainGain` also accepts the aliases `Gain` and `PluginGain`; it matches only a plugin-wide gain parameter, never a band-specific gain. `Width` also accepts `StereoWidth` and `OutputWidth`. GainScale accepts the plugin's displayed percentage format, such as `100%` or `200%`. A/B accepts A, B, 0, 1, or Toggle only when the plugin exposes A/B as a host parameter.
 
-## Input Strip Commands
+## FX In Commands
 
 Enable or disable delay/volume processing on a source channel:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Enable=1;);
-SendText("vban1", MFX.Strip(0).Ch(1).Enable=0;);
+SendText("vban1", MFX.In(A1).Ch(1).Enable=1;);
+SendText("vban1", MFX.In(A1).Ch(1).Enable=0;);
 ```
 
 Set delay:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Delay=25;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay=25;);
 ```
 
 Add or subtract delay:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Delay+=10;);
-SendText("vban1", MFX.Strip(0).Ch(1).Delay-=10;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay+=10;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay-=10;);
 ```
 
 Set volume:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Volume=100;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume=100;);
 ```
 
 Add or subtract volume:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Volume+=5;);
-SendText("vban1", MFX.Strip(0).Ch(1).Volume-=5;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume+=5;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume-=5;);
 ```
 
-## Output Bus Commands
+## FX Out Commands
 
 Enable or disable delay/volume processing on an output channel:
 
 ```text
-SendText("vban1", MFX.Bus(B1).Ch(1).Enable=1;);
-SendText("vban1", MFX.Bus(B1).Ch(1).Enable=0;);
+SendText("vban1", MFX.Out(B1).Ch(1).Enable=1;);
+SendText("vban1", MFX.Out(B1).Ch(1).Enable=0;);
 ```
 
 Set delay or volume:
 
 ```text
-SendText("vban1", MFX.Bus(B1).Ch(1).Delay=25;);
-SendText("vban1", MFX.Bus(B1).Ch(1).Volume=100;);
+SendText("vban1", MFX.Out(B1).Ch(1).Delay=25;);
+SendText("vban1", MFX.Out(B1).Ch(1).Volume=100;);
 ```
 
-Relative delay and volume work on buses too:
+Relative delay and volume work on FX Out nodes too:
 
 ```text
-SendText("vban1", MFX.Bus(A1).Ch(1-2).Delay+=10;);
-SendText("vban1", MFX.Bus(A1).Ch(1-2).Volume-=5;);
+SendText("vban1", MFX.Out(A1-A2).Ch(1-2).Delay+=10;);
+SendText("vban1", MFX.Out(A1-A2).Ch(1-2).Volume-=5;);
 ```
 
 ## Direct Route Commands
 
-Route commands are input-strip commands. They create direct input-to-output routing after the input VST section.
+Route commands are FX In commands. They create direct FX In to FX Out routing after the VST section.
 
-Replace the route list for strip 0 channel 1 and route it to bus B1 channel 3:
+Replace the route list for FX In A1 and route it to FX Out B3:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Route=Bus(B1).Ch(3););
+SendText("vban1", MFX.In(A1).Ch(1).Route=Out(B3).Ch(1););
 ```
 
 Add another route destination:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Route+=Bus(B2).Ch(4););
+SendText("vban1", MFX.In(A1).Ch(1).Route+=Out(B4).Ch(1););
 ```
 
 Remove one route destination:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).Route-=Bus(B1).Ch(3););
+SendText("vban1", MFX.In(A1).Ch(1).Route-=Out(B3).Ch(1););
 ```
 
 Enable saved routes:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=1;);
+SendText("vban1", MFX.In(A1).Ch(1).RouteEnable=1;);
 ```
 
 Disable saved routes without deleting them:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=0;);
+SendText("vban1", MFX.In(A1).Ch(1).RouteEnable=0;);
 ```
 
 Mute the normal source path while routing:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=1;);
+SendText("vban1", MFX.In(A1).Ch(1).MuteNormal=1;);
 ```
 
 Restore the normal source path:
 
 ```text
-SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=0;);
+SendText("vban1", MFX.In(A1).Ch(1).MuteNormal=0;);
 ```
 
 ## Combined Commands
@@ -235,7 +235,7 @@ SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=0;);
 Multiple commands can be sent in one `SendText`:
 
 ```text
-SendText("vban1", MFX.Strip(5).Ch(1).Route=Bus(B1).Ch(1); MFX.Strip(5).Ch(1).MuteNormal=1; MFX.Strip(5).Ch(1).Delay=20;);
+SendText("vban1", MFX.In(A6).Ch(1).Route=Out(B1).Ch(1); MFX.In(A6).Ch(1).MuteNormal=1; MFX.In(A6).Ch(1).Delay=20;);
 ```
 
 ## Accepted Aliases

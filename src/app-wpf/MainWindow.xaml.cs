@@ -1110,15 +1110,6 @@ public partial class MainWindow : Window
         var modeActions = CreateMenuColumns();
         modeActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         modeActions.Margin = new Thickness(0, 6, 0, 0);
-        var advanced = CreateSaveManagerButton(_advancedModeActive ? "Go Simple" : "Go Advanced");
-        advanced.Background = ThemeBrushOr(_advancedModeActive ? "RouteActiveBrush" : "VstActiveBrush", _advancedModeActive ? "#14392F" : "#3A2115");
-        advanced.BorderBrush = ThemeBrushOr(_advancedModeActive ? "RouteAccentBrush" : "VstAccentBrush", _advancedModeActive ? "#55C27A" : "#F08A3E");
-        advanced.BorderThickness = new Thickness(1.5);
-        advanced.ToolTip = _advancedModeActive
-            ? "Switch to Simple mode. Saves the session and restarts FX Host."
-            : "Show In -> Out and Channels in Advanced mode. Saves the session and restarts FX Host.";
-        advanced.Click += (_, _) => RestartWithAdvancedMode(window, advanced);
-        AddMenuCell(modeActions, advanced, 0, 0);
         var close = CreateSaveManagerButton("Close");
         close.Click += (_, _) => window.Close();
         AddMenuCell(modeActions, close, 0, 2);
@@ -1582,7 +1573,8 @@ public partial class MainWindow : Window
         _kind = savedKind;
         _restoredSavedEditionWorkspace = ActivateVoicemeeterEditionWorkspace(_settings, savedKind, _kind);
         _settings.Kind = _kind;
-        _advancedModeActive = _settings.AdvancedModeEnabled;
+        // One version only (no Simple/Advanced): restore any graph a Simple-mode save parked.
+        _settings.AdvancedModeEnabled = true;
         AdvancedModeState.PrepareWorkspace(_settings);
         _engine.AdvancedModeEnabled = _advancedModeActive;
         ApplyAdvancedModeVisibility();
@@ -2428,12 +2420,12 @@ public partial class MainWindow : Window
         }
 
         if (command.Property is MfxTextCommandProperty.Route or MfxTextCommandProperty.RouteEnable or MfxTextCommandProperty.RouteMuteNormal
-            && command.TargetKind != MfxTextCommandTargetKind.Strip)
+            && command.TargetKind != MfxTextCommandTargetKind.In)
         {
             throw new InvalidOperationException($"{command.SourceText}: route commands only support Strip targets.");
         }
 
-        var mode = command.TargetKind == MfxTextCommandTargetKind.Strip
+        var mode = command.TargetKind == MfxTextCommandTargetKind.In
             ? CallbackMode.Input
             : CallbackMode.Output;
         var endpoint = ResolveMfxEndpoint(command);
@@ -2603,9 +2595,9 @@ public partial class MainWindow : Window
 
     private IoEndpoint ResolveMfxEndpoint(MfxTextCommand command)
     {
-        return command.TargetKind == MfxTextCommandTargetKind.Strip
-            ? ResolveMfxStripEndpoint(command.Target)
-            : ResolveMfxBusEndpoint(command.Target);
+        return command.TargetKind == MfxTextCommandTargetKind.In
+            ? ResolveMfxInEndpoint(command.Target)
+            : ResolveMfxOutEndpoint(command.Target);
     }
 
     // Accepts "A1", "A1-A2", "FX A1", "FX In A1" / "FX Out A1-A2".
@@ -2619,7 +2611,7 @@ public partial class MainWindow : Window
             string.Equals(NormalizeEndpointText(endpoint.Name), wanted, StringComparison.OrdinalIgnoreCase));
     }
 
-    private IoEndpoint ResolveMfxStripEndpoint(string targetText)
+    private IoEndpoint ResolveMfxInEndpoint(string targetText)
     {
         var endpoints = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind);
         var target = targetText.Trim();
@@ -2630,15 +2622,15 @@ public partial class MainWindow : Window
                 return endpoints[stripIndex];
             }
 
-            throw new InvalidOperationException($"Strip({stripIndex}) is not available: FX In has {endpoints.Count} nodes.");
+            throw new InvalidOperationException($"In({stripIndex}) is not available: FX In has {endpoints.Count} nodes.");
         }
 
         var namedEndpoint = FindFxNodeByName(endpoints, target);
         return namedEndpoint
-            ?? throw new InvalidOperationException($"Unknown strip target: {targetText}");
+            ?? throw new InvalidOperationException($"Unknown FX In node: {targetText}");
     }
 
-    private IoEndpoint ResolveMfxBusEndpoint(string targetText)
+    private IoEndpoint ResolveMfxOutEndpoint(string targetText)
     {
         var endpoints = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         var target = targetText.Trim();
@@ -2649,12 +2641,12 @@ public partial class MainWindow : Window
                 return endpoints[busIndex];
             }
 
-            throw new InvalidOperationException($"Bus({busIndex}) is not available: FX Out has {endpoints.Count} nodes.");
+            throw new InvalidOperationException($"Out({busIndex}) is not available: FX Out has {endpoints.Count} nodes.");
         }
 
         var endpoint = FindFxNodeByName(endpoints, target);
         return endpoint
-            ?? throw new InvalidOperationException($"Unknown bus target: {targetText}");
+            ?? throw new InvalidOperationException($"Unknown FX Out node: {targetText}");
     }
 
     private void ApplyMfxTextCommandToChannel(EndpointChannelSettings settings, int offset, MfxTextCommand command)
@@ -2718,7 +2710,7 @@ public partial class MainWindow : Window
     private void ApplyMfxRouteDestinationCommand(EndpointChannelSettings settings, int offset, MfxTextCommand command)
     {
         var destinationText = MfxTextCommandParser.ParseRouteDestination(command.ValueText);
-        var bus = ResolveMfxBusEndpoint(destinationText.BusTarget);
+        var bus = ResolveMfxOutEndpoint(destinationText.OutTarget);
         var destinationOffset = destinationText.OneBasedChannel - 1;
         if (destinationOffset < 0 || destinationOffset >= bus.ChannelCount)
         {

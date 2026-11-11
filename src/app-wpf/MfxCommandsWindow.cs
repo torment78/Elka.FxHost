@@ -77,30 +77,22 @@ internal sealed class MfxCommandsWindow : Window
     }
 
     private const string CommandReference = """
-Elka VoiceMeeter FX Host MFX Text Commands
+Elka FX Host MFX Text Commands
 
 MacroButtons sends these over VBAN-TEXT:
 
-SendText("vban1", MFX.Strip(0).Ch(1).Delay=25;);
+SendText("vban1", MFX.VST(0).Enable=Toggle;);
 
 The MacroButtons VBAN-TEXT slot must use the same port and stream name as the app.
 Default app settings are port 6981 and stream Command1.
 
 Targets
 
-Strip(...) = input endpoint. Numbers are zero-based.
-Bus(...)   = output bus endpoint. Numbers are zero-based, or use A1-A5 / B1-B3.
-VST(...)   = VST instance ID shown in the node's right-click menu and editor title.
+In(...)  = a node on the FX In side:  In(A1), In(A1-A2), or its number from the top (0 = first).
+Out(...) = a node on the FX Out side: Out(A1), Out(A1-A2), or its number from the top.
+VST(...) = VST instance ID shown in the node's right-click menu and editor title.
 
-For Potato input strips:
-Strip(0) = Hardware In 1
-Strip(1) = Hardware In 2
-Strip(2) = Hardware In 3
-Strip(3) = Hardware In 4
-Strip(4) = Hardware In 5
-Strip(5) = VAIO
-Strip(6) = AUX
-Strip(7) = VAIO3
+Use node names: numbers move when nodes are linked or unlinked, names do not.
 
 Channel selection is one-based:
 Ch(1)
@@ -188,37 +180,37 @@ Use right-click Info on the loaded VST to find its parameter indexes. Indexes be
 to that exact plugin version and may change when the plugin is updated.
 
 Enable delay/volume processing:
-SendText("vban1", MFX.Strip(0).Ch(1).Enable=1;);
-SendText("vban1", MFX.Strip(0).Ch(1).Enable=0;);
-SendText("vban1", MFX.Bus(B1).Ch(1).Enable=1;);
+SendText("vban1", MFX.In(A1).Ch(1).Enable=1;);
+SendText("vban1", MFX.In(A1).Ch(1).Enable=0;);
+SendText("vban1", MFX.Out(A1).Ch(1).Enable=1;);
 
 Delay:
-SendText("vban1", MFX.Strip(0).Ch(1).Delay=25;);
-SendText("vban1", MFX.Strip(0).Ch(1).Delay+=10;);
-SendText("vban1", MFX.Strip(0).Ch(1).Delay-=10;);
-SendText("vban1", MFX.Bus(B1).Ch(1).Delay=25;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay=25;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay+=10;);
+SendText("vban1", MFX.In(A1).Ch(1).Delay-=10;);
+SendText("vban1", MFX.Out(A1).Ch(1).Delay=25;);
 
 Volume:
-SendText("vban1", MFX.Strip(0).Ch(1).Volume=100;);
-SendText("vban1", MFX.Strip(0).Ch(1).Volume+=5;);
-SendText("vban1", MFX.Strip(0).Ch(1).Volume-=5;);
-SendText("vban1", MFX.Bus(B1).Ch(1).Volume=100;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume=100;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume+=5;);
+SendText("vban1", MFX.In(A1).Ch(1).Volume-=5;);
+SendText("vban1", MFX.Out(A1-A2).Ch(All).Volume=100;);
 
-Direct routing, input strips only:
-SendText("vban1", MFX.Strip(0).Ch(1).Route=Bus(B1).Ch(3););
-SendText("vban1", MFX.Strip(0).Ch(1).Route+=Bus(B2).Ch(4););
-SendText("vban1", MFX.Strip(0).Ch(1).Route-=Bus(B1).Ch(3););
+Direct routing, FX In to FX Out:
+SendText("vban1", MFX.In(A1).Ch(1).Route=Out(B1).Ch(1););
+SendText("vban1", MFX.In(A1).Ch(1).Route+=Out(B2).Ch(1););
+SendText("vban1", MFX.In(A1).Ch(1).Route-=Out(B1).Ch(1););
 
 Enable saved route destinations:
-SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=1;);
-SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=0;);
+SendText("vban1", MFX.In(A1).Ch(1).RouteEnable=1;);
+SendText("vban1", MFX.In(A1).Ch(1).RouteEnable=0;);
 
-Mute standard routing for a routed input channel:
-SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=1;);
-SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=0;);
+Mute standard routing for a routed FX In channel:
+SendText("vban1", MFX.In(A1).Ch(1).MuteNormal=1;);
+SendText("vban1", MFX.In(A1).Ch(1).MuteNormal=0;);
 
 Combined commands:
-SendText("vban1", MFX.Strip(5).Ch(1).Route=Bus(B1).Ch(1); MFX.Strip(5).Ch(1).MuteNormal=1; MFX.Strip(5).Ch(1).Delay=20;);
+SendText("vban1", MFX.In(A6).Ch(1).Route=Out(B1).Ch(1); MFX.In(A6).Ch(1).MuteNormal=1; MFX.In(A6).Ch(1).Delay=20;);
 
 Aliases
 

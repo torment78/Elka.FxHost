@@ -5,8 +5,8 @@ namespace Elka.VoiceMeeterFxHost.App;
 
 internal enum MfxTextCommandTargetKind
 {
-    Strip,
-    Bus,
+    In,
+    Out,
     Vst
 }
 
@@ -87,7 +87,7 @@ internal sealed record MfxTextCommandChannelSelection(bool IsAll, IReadOnlyList<
     }
 }
 
-internal sealed record MfxRouteDestinationText(string BusTarget, int OneBasedChannel);
+internal sealed record MfxRouteDestinationText(string OutTarget, int OneBasedChannel);
 
 internal static partial class MfxTextCommandParser
 {
@@ -139,7 +139,7 @@ internal static partial class MfxTextCommandParser
         var match = RouteDestinationPattern().Match(valueText);
         if (!match.Success)
         {
-            throw new InvalidOperationException("Route destination must be Bus(B1).Ch(3).");
+            throw new InvalidOperationException("Route destination must be Out(A1).Ch(1).");
         }
 
         var busTarget = match.Groups["bus"].Value.Trim();
@@ -197,9 +197,9 @@ internal static partial class MfxTextCommandParser
 
     private static MfxTextCommandTargetKind ParseTargetKind(string value)
     {
-        return value.Equals("Strip", StringComparison.OrdinalIgnoreCase)
-            ? MfxTextCommandTargetKind.Strip
-            : MfxTextCommandTargetKind.Bus;
+        return value.Equals("In", StringComparison.OrdinalIgnoreCase) || value.Equals("FXIn", StringComparison.OrdinalIgnoreCase)
+            ? MfxTextCommandTargetKind.In
+            : MfxTextCommandTargetKind.Out;
     }
 
     private static MfxTextCommandProperty ParseProperty(string value)
@@ -303,12 +303,12 @@ internal static partial class MfxTextCommandParser
     private static partial Regex VstCommandPattern();
 
     [GeneratedRegex(
-        @"^\s*MFX\.(?<targetKind>Strip|Bus)\((?<target>[^)]+)\)\.Ch\((?<channels>[^)]+)\)\.(?<property>Enable|Enabled|Delay|DelayMs|Ms|Volume|Vol|Gain|Route|RouteEnable|RouteEnabled|RouteMute|MuteRoute|MuteNormal|RouteMuteNormal)\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
+        @"^\s*MFX\.(?<targetKind>FXIn|FXOut|In|Out)\((?<target>[^)]+)\)\.Ch\((?<channels>[^)]+)\)\.(?<property>Enable|Enabled|Delay|DelayMs|Ms|Volume|Vol|Gain|Route|RouteEnable|RouteEnabled|RouteMute|MuteRoute|MuteNormal|RouteMuteNormal)\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CommandPattern();
 
     [GeneratedRegex(
-        @"^\s*Bus\((?<bus>[^)]+)\)\.Ch\((?<channel>\d+)\)\s*$",
+        @"^\s*(?:FX)?Out\((?<bus>[^)]+)\)\.Ch\((?<channel>\d+)\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RouteDestinationPattern();
 }
