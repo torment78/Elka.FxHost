@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>0.8.3.20</Version>
+    <Version>0.1.0</Version>
     <InformationalVersion>0.8.3.20</InformationalVersion>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
@@ -34,19 +34,19 @@
     <NativeVst2ConfigureArg>-DELKA_VST2_SDK_PATH=&quot;$(Vst2SdkPath)&quot;</NativeVst2ConfigureArg>
     <ElkaCreateReleaseArtifacts Condition="'$(ElkaCreateReleaseArtifacts)' == ''">false</ElkaCreateReleaseArtifacts>
     <ElkaUploadGitHubRelease Condition="'$(ElkaUploadGitHubRelease)' == ''">false</ElkaUploadGitHubRelease>
-    <GitHubRepository Condition="'$(GitHubRepository)' == ''">torment78/Elka.VoiceMeeterFxHost</GitHubRepository>
+    <GitHubRepository Condition="'$(GitHubRepository)' == ''">torment78/Elka.FxHost</GitHubRepository>
     <GitHubReleaseTag Condition="'$(GitHubReleaseTag)' == ''">v$(Version)</GitHubReleaseTag>
     <ReleaseDir Condition="'$(ReleaseDir)' == ''">$(RepoRoot)\artifacts\release\</ReleaseDir>
     <PublishOutputDir Condition="'$(PublishOutputDir)' == '' and '$(PublishDir)' != ''">$(PublishDir)</PublishOutputDir>
     <PublishOutputDir Condition="'$(PublishOutputDir)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\publish\</PublishOutputDir>
     <PublishedExePath Condition="'$(PublishedExePath)' == ''">$(PublishOutputDir)Elka.VoiceMeeterFxHost.App.exe</PublishedExePath>
-    <ReleaseExePath Condition="'$(ReleaseExePath)' == ''">$(ReleaseDir)ElkaVoiceMeeterFxHost.exe</ReleaseExePath>
-    <ReleaseZipPath Condition="'$(ReleaseZipPath)' == ''">$(ReleaseDir)ElkaVoiceMeeterFxHost-$(RuntimeIdentifier)-framework-dependent.zip</ReleaseZipPath>
-    <ReleaseInstallerBaseName Condition="'$(ReleaseInstallerBaseName)' == ''">ElkaVoiceMeeterFxHostSetup-v$(Version)</ReleaseInstallerBaseName>
+    <ReleaseExePath Condition="'$(ReleaseExePath)' == ''">$(ReleaseDir)ElkaFxHost.exe</ReleaseExePath>
+    <ReleaseZipPath Condition="'$(ReleaseZipPath)' == ''">$(ReleaseDir)ElkaFxHost-$(RuntimeIdentifier)-framework-dependent.zip</ReleaseZipPath>
+    <ReleaseInstallerBaseName Condition="'$(ReleaseInstallerBaseName)' == ''">ElkaFxHostSetup-v$(Version)</ReleaseInstallerBaseName>
     <ReleaseInstallerPath Condition="'$(ReleaseInstallerPath)' == ''">$(ReleaseDir)$(ReleaseInstallerBaseName).exe</ReleaseInstallerPath>
-    <InnoSetupScript Condition="'$(InnoSetupScript)' == ''">$(RepoRoot)\installer\ElkaVoiceMeeterFxHost.iss</InnoSetupScript>
+    <InnoSetupScript Condition="'$(InnoSetupScript)' == ''">$(RepoRoot)\installer\ElkaFxHost.iss</InnoSetupScript>
     <ReleaseUploadLogPath Condition="'$(ReleaseUploadLogPath)' == ''">$(ReleaseDir)github-upload.log</ReleaseUploadLogPath>
-    <SingleFilePublishDir Condition="'$(SingleFilePublishDir)' == ''">$(RepoRoot)\artifacts\publish\ElkaVoiceMeeterFxHost\$(RuntimeIdentifier)-singlefile\</SingleFilePublishDir>
+    <SingleFilePublishDir Condition="'$(SingleFilePublishDir)' == ''">$(RepoRoot)\artifacts\publish\ElkaFxHost\$(RuntimeIdentifier)-singlefile\</SingleFilePublishDir>
     <SingleFilePublishedExePath Condition="'$(SingleFilePublishedExePath)' == ''">$(SingleFilePublishDir)Elka.VoiceMeeterFxHost.App.exe</SingleFilePublishedExePath>
     <PluginWorkerOutputDir>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\</PluginWorkerOutputDir>
     <CMakeExe Condition="'$(CMakeExe)' == '' and Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe')">C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe</CMakeExe>
@@ -130,7 +130,8 @@
       <ResolvedFileToPublish Include="$(AsioDriverPath)" Condition="Exists('$(AsioDriverPath)')">
         <RelativePath>ElkaFxHost.Asio.dll</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
+        <!-- Matrix loads the driver from disk, so it is never bundled into the EXE. -->
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
       </ResolvedFileToPublish>
     </ItemGroup>
   </Target>

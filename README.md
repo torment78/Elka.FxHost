@@ -52,10 +52,17 @@ Channels with no cables pass audio through dry, as ASIO Patch did.
 
 See [docs/AsioDriver.md](docs/AsioDriver.md).
 
+## Installer
+
+`scripts\publish-release.ps1` publishes the app and builds
+`artifactselease\ElkaFxHostSetup-v<version>.exe` with Inno Setup
+(`installer/ElkaFxHost.iss`). One setup installs the app and the driver. It registers the
+driver silently, asks Matrix (32) / Matrix Coconut (64) / Custom (8–128), and the
+uninstaller removes the driver again. For silent installs, use `/VERYSILENT /CHANNELS=32`.
+It installs side by side with Elka VoiceMeeter FX Host.
+
 ## Not done yet
 
-- The installer (`installer/*.iss`) is still the VoiceMeeter FX Host one. It needs new
-  branding, silent driver registration and the Matrix / Coconut / Custom choice.
 - The check projects under `tests/` have not been updated to remove VoiceMeeter and ASIO Patch.
 - Internal type names (`VoicemeeterKind`, `VoicemeeterIoLayout`, the `.csproj` and native
   DLL names) are still the old ones. They no longer do anything with VoiceMeeter.

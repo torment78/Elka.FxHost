@@ -11,14 +11,14 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $project = Join-Path $repoRoot "src\app-wpf\Elka.VoiceMeeterFxHost.App.csproj"
-$publishDir = Join-Path $repoRoot "artifacts\publish\ElkaVoiceMeeterFxHost\$Runtime"
-$singleFileDir = Join-Path $repoRoot "artifacts\publish\ElkaVoiceMeeterFxHost\$Runtime-singlefile"
+$publishDir = Join-Path $repoRoot "artifacts\publish\ElkaFxHost\$Runtime"
+$singleFileDir = Join-Path $repoRoot "artifacts\publish\ElkaFxHost\$Runtime-singlefile"
 $releaseDir = Join-Path $repoRoot "artifacts\release"
 $publishExe = Join-Path $publishDir "Elka.VoiceMeeterFxHost.App.exe"
 $singleFileExe = Join-Path $singleFileDir "Elka.VoiceMeeterFxHost.App.exe"
-$releaseExe = Join-Path $releaseDir "ElkaVoiceMeeterFxHost.exe"
-$zipPath = Join-Path $releaseDir "ElkaVoiceMeeterFxHost-$Runtime-framework-dependent.zip"
-$installerScript = Join-Path $repoRoot "installer\ElkaVoiceMeeterFxHost.iss"
+$releaseExe = Join-Path $releaseDir "ElkaFxHost.exe"
+$zipPath = Join-Path $releaseDir "ElkaFxHost-$Runtime-framework-dependent.zip"
+$installerScript = Join-Path $repoRoot "installer\ElkaFxHost.iss"
 
 function Get-ProjectVersion {
     $projectXml = [xml](Get-Content -LiteralPath $project -Raw)
@@ -70,11 +70,11 @@ if (![string]::IsNullOrWhiteSpace($LocalRevision)) {
         throw "Local revision $version is for unsigned local builds and cannot be uploaded."
     }
 
-    $releaseExe = Join-Path $releaseDir "ElkaVoiceMeeterFxHost-v$version.exe"
-    $zipPath = Join-Path $releaseDir "ElkaVoiceMeeterFxHost-v$version-$Runtime-framework-dependent.zip"
+    $releaseExe = Join-Path $releaseDir "ElkaFxHost-v$version.exe"
+    $zipPath = Join-Path $releaseDir "ElkaFxHost-v$version-$Runtime-framework-dependent.zip"
 }
 
-$installerBaseName = "ElkaVoiceMeeterFxHostSetup-v$version"
+$installerBaseName = "ElkaFxHostSetup-v$version"
 $installerPath = Join-Path $releaseDir "$installerBaseName.exe"
 
 if (Test-Path $publishDir) {
@@ -106,6 +106,12 @@ if ($LASTEXITCODE -ne 0) {
 
 if (!(Test-Path $publishExe)) {
     throw "Publish did not create $publishExe"
+}
+
+# The installer registers the driver from the publish folder; it must be a separate file.
+$publishDriver = Join-Path $publishDir "ElkaFxHost.Asio.dll"
+if (!(Test-Path $publishDriver)) {
+    throw "Publish did not include the ASIO driver $publishDriver"
 }
 
 Get-ChildItem -LiteralPath $publishDir -Recurse -File -Filter "*.pdb" |
@@ -176,7 +182,7 @@ if ($Upload) {
 
     $uploadScript = Join-Path $repoRoot "scripts\upload-release-assets.ps1"
     & $uploadScript `
-        -Repository "torment78/Elka.VoiceMeeterFxHost" `
+        -Repository "torment78/Elka.FxHost" `
         -Tag $Tag `
         -ZipPath $zipPath `
         -ExePath $releaseExe `

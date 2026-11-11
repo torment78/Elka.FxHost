@@ -110,7 +110,7 @@ internal sealed class ApplicationUpdates
         {
             if (release.Draft || !ReleaseVersion.TryParse(release.Tag, out var version))
                 continue;
-            var expectedName = $"ElkaVoiceMeeterFxHostSetup-v{version}.exe";
+            var expectedName = $"ElkaFxHostSetup-v{version}.exe";
             var asset = release.Assets?.FirstOrDefault(asset =>
                 string.Equals(asset.Name, expectedName, StringComparison.OrdinalIgnoreCase) &&
                 asset.State == "uploaded" && asset.Size > 0 && asset.Size <= MaximumInstallerSize);
