@@ -27,7 +27,7 @@ public partial class MainWindow
             _workspaceView = WorkspaceView.Vst; _vstCanvasMode = CallbackMode.Input;
             NormalizePluginInstanceIds();
             Assert(_settings.PluginNodes.Select(n => n.InstanceId).SequenceEqual(Enumerable.Range(0, PluginCapacity.Slots)),
-                "Every supported native slot receives its own VFX ID");
+                "Every supported native slot receives its own MFX ID");
             Assert(NextAvailablePluginInstanceId() == -1, "No extra ID after capacity is reached");
             var restored = JsonSerializer.Deserialize<FxHostSettings>(JsonSerializer.Serialize(_settings))!;
             Assert(restored.PluginNodes.Count == PluginCapacity.Slots && restored.PluginNodes[^1].Slot == PluginCapacity.Slots - 1,
@@ -47,11 +47,11 @@ public partial class MainWindow
                 "Highest VST's widget levels and peak latch work");
             Assert(new WidgetLevelPin(last.Slot, 31).Valid && !new WidgetLevelPin(PluginCapacity.Slots, 0).Valid,
                 "Widget bounds include the last slot and reject overflow");
-            var script = VfxTextCommandParser.ParseScript($"VFX.VST({last.InstanceId}).Bypass=1");
-            Assert(script.Count == 1 && script[0].Target == last.InstanceId.ToString(), "Highest VST ID parses in VFX commands");
+            var script = MfxTextCommandParser.ParseScript($"MFX.VST({last.InstanceId}).Bypass=1");
+            Assert(script.Count == 1 && script[0].Target == last.InstanceId.ToString(), "Highest VST ID parses in MFX commands");
             _settings.PluginNodes.RemoveAt(73);
             Assert(NextAvailablePluginInstanceId() == 73, "Removed ID can be reused in a full graph");
-            Console.WriteLine($"PASS: {PluginCapacity.Slots}-node UI, saved graph, ID reuse, widget levels, failures and VFX addressing. Native audio blocked.");
+            Console.WriteLine($"PASS: {PluginCapacity.Slots}-node UI, saved graph, ID reuse, widget levels, failures and MFX addressing. Native audio blocked.");
         }
         finally
         {

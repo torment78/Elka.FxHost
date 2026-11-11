@@ -3,14 +3,14 @@ using System.Text.RegularExpressions;
 
 namespace Elka.VoiceMeeterFxHost.App;
 
-internal enum VfxTextCommandTargetKind
+internal enum MfxTextCommandTargetKind
 {
     Strip,
     Bus,
     Vst
 }
 
-internal enum VfxTextCommandProperty
+internal enum MfxTextCommandProperty
 {
     Enable,
     Delay,
@@ -54,24 +54,24 @@ internal enum VfxTextCommandProperty
     Parameter
 }
 
-internal enum VfxTextCommandOperator
+internal enum MfxTextCommandOperator
 {
     Set,
     Add,
     Subtract
 }
 
-internal sealed record VfxTextCommand(
-    VfxTextCommandTargetKind TargetKind,
+internal sealed record MfxTextCommand(
+    MfxTextCommandTargetKind TargetKind,
     string Target,
-    VfxTextCommandChannelSelection Channels,
-    VfxTextCommandProperty Property,
-    VfxTextCommandOperator Operator,
+    MfxTextCommandChannelSelection Channels,
+    MfxTextCommandProperty Property,
+    MfxTextCommandOperator Operator,
     string ValueText,
     string SourceText,
     int? PluginParameterIndex = null);
 
-internal sealed record VfxTextCommandChannelSelection(bool IsAll, IReadOnlyList<int> OneBasedChannels)
+internal sealed record MfxTextCommandChannelSelection(bool IsAll, IReadOnlyList<int> OneBasedChannels)
 {
     public IEnumerable<int> GetZeroBasedChannels(int channelCount)
     {
@@ -87,13 +87,13 @@ internal sealed record VfxTextCommandChannelSelection(bool IsAll, IReadOnlyList<
     }
 }
 
-internal sealed record VfxRouteDestinationText(string BusTarget, int OneBasedChannel);
+internal sealed record MfxRouteDestinationText(string BusTarget, int OneBasedChannel);
 
-internal static partial class VfxTextCommandParser
+internal static partial class MfxTextCommandParser
 {
-    public static IReadOnlyList<VfxTextCommand> ParseScript(string script)
+    public static IReadOnlyList<MfxTextCommand> ParseScript(string script)
     {
-        var commands = new List<VfxTextCommand>();
+        var commands = new List<MfxTextCommand>();
         foreach (var rawCommand in script.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (string.IsNullOrWhiteSpace(rawCommand))
@@ -134,7 +134,7 @@ internal static partial class VfxTextCommandParser
         };
     }
 
-    public static VfxRouteDestinationText ParseRouteDestination(string valueText)
+    public static MfxRouteDestinationText ParseRouteDestination(string valueText)
     {
         var match = RouteDestinationPattern().Match(valueText);
         if (!match.Success)
@@ -149,10 +149,10 @@ internal static partial class VfxTextCommandParser
             throw new InvalidOperationException("Route destination channel must be 1 or higher.");
         }
 
-        return new VfxRouteDestinationText(busTarget, channel);
+        return new MfxRouteDestinationText(busTarget, channel);
     }
 
-    private static VfxTextCommand ParseCommand(string rawCommand)
+    private static MfxTextCommand ParseCommand(string rawCommand)
     {
         var vstMatch = VstCommandPattern().Match(rawCommand);
         if (vstMatch.Success)
@@ -168,10 +168,10 @@ internal static partial class VfxTextCommandParser
                 parameterIndex = parsedIndex;
             }
 
-            return new VfxTextCommand(
-                VfxTextCommandTargetKind.Vst,
+            return new MfxTextCommand(
+                MfxTextCommandTargetKind.Vst,
                 vstMatch.Groups["target"].Value.Trim(),
-                new VfxTextCommandChannelSelection(IsAll: true, []),
+                new MfxTextCommandChannelSelection(IsAll: true, []),
                 ParseProperty(vstMatch.Groups["property"].Value),
                 ParseOperator(vstMatch.Groups["op"].Value),
                 vstMatch.Groups["value"].Value.Trim(),
@@ -182,7 +182,7 @@ internal static partial class VfxTextCommandParser
         var match = CommandPattern().Match(rawCommand);
         if (!match.Success)
         {
-            throw new InvalidOperationException($"Unsupported VFX command: {rawCommand}");
+            throw new InvalidOperationException($"Unsupported MFX command: {rawCommand}");
         }
 
         var targetKind = ParseTargetKind(match.Groups["targetKind"].Value);
@@ -192,80 +192,80 @@ internal static partial class VfxTextCommandParser
         var op = ParseOperator(match.Groups["op"].Value);
         var valueText = match.Groups["value"].Value.Trim();
 
-        return new VfxTextCommand(targetKind, target, channels, property, op, valueText, rawCommand);
+        return new MfxTextCommand(targetKind, target, channels, property, op, valueText, rawCommand);
     }
 
-    private static VfxTextCommandTargetKind ParseTargetKind(string value)
+    private static MfxTextCommandTargetKind ParseTargetKind(string value)
     {
         return value.Equals("Strip", StringComparison.OrdinalIgnoreCase)
-            ? VfxTextCommandTargetKind.Strip
-            : VfxTextCommandTargetKind.Bus;
+            ? MfxTextCommandTargetKind.Strip
+            : MfxTextCommandTargetKind.Bus;
     }
 
-    private static VfxTextCommandProperty ParseProperty(string value)
+    private static MfxTextCommandProperty ParseProperty(string value)
     {
         return value.ToLowerInvariant() switch
         {
-            "enable" or "enabled" => VfxTextCommandProperty.Enable,
-            "delay" or "delayms" or "ms" => VfxTextCommandProperty.Delay,
-            "volume" or "vol" or "gain" => VfxTextCommandProperty.Volume,
-            "route" => VfxTextCommandProperty.Route,
-            "routeenable" or "routeenabled" => VfxTextCommandProperty.RouteEnable,
-            "routemute" or "muteroute" or "mutenormal" or "routemutenormal" => VfxTextCommandProperty.RouteMuteNormal,
-            "bypass" or "bypassed" => VfxTextCommandProperty.Bypass,
-            "inputgain" or "ingain" => VfxTextCommandProperty.InputGain,
-            "outputgain" or "outgain" => VfxTextCommandProperty.OutputGain,
-            "maingain" or "plugingain" or "gain" => VfxTextCommandProperty.MainGain,
-            "gainscale" or "scale" => VfxTextCommandProperty.GainScale,
-            "drygain" => VfxTextCommandProperty.DryGain,
-            "wetgain" => VfxTextCommandProperty.WetGain,
-            "mix" or "drywet" => VfxTextCommandProperty.Mix,
-            "width" or "stereowidth" or "outputwidth" => VfxTextCommandProperty.Width,
-            "inputpan" or "inpan" => VfxTextCommandProperty.InputPan,
-            "outputpan" or "outpan" => VfxTextCommandProperty.OutputPan,
-            "drypan" => VfxTextCommandProperty.DryPan,
-            "wetpan" => VfxTextCommandProperty.WetPan,
-            "threshold" or "thresh" => VfxTextCommandProperty.Threshold,
-            "ratio" or "compressionratio" => VfxTextCommandProperty.Ratio,
-            "attack" or "attacktime" => VfxTextCommandProperty.Attack,
-            "release" or "releasetime" => VfxTextCommandProperty.Release,
-            "hold" or "holdtime" => VfxTextCommandProperty.Hold,
-            "knee" or "kneewidth" => VfxTextCommandProperty.Knee,
-            "range" or "reductionrange" => VfxTextCommandProperty.Range,
-            "makeupgain" or "makeup" => VfxTextCommandProperty.MakeupGain,
-            "ceiling" or "outputceiling" => VfxTextCommandProperty.Ceiling,
-            "lookahead" or "lookaheadtime" => VfxTextCommandProperty.Lookahead,
-            "rate" or "speed" => VfxTextCommandProperty.Rate,
-            "depth" => VfxTextCommandProperty.Depth,
-            "feedback" => VfxTextCommandProperty.Feedback,
-            "drive" => VfxTextCommandProperty.Drive,
-            "tone" => VfxTextCommandProperty.Tone,
-            "mode" => VfxTextCommandProperty.Mode,
-            "ab" or "compare" => VfxTextCommandProperty.Ab,
-            "program" or "preset" => VfxTextCommandProperty.Program,
-            "editor" => VfxTextCommandProperty.Editor,
-            "reload" => VfxTextCommandProperty.Reload,
-            "parameter" => VfxTextCommandProperty.Parameter,
-            _ => throw new InvalidOperationException($"Unsupported VFX property: {value}")
+            "enable" or "enabled" => MfxTextCommandProperty.Enable,
+            "delay" or "delayms" or "ms" => MfxTextCommandProperty.Delay,
+            "volume" or "vol" or "gain" => MfxTextCommandProperty.Volume,
+            "route" => MfxTextCommandProperty.Route,
+            "routeenable" or "routeenabled" => MfxTextCommandProperty.RouteEnable,
+            "routemute" or "muteroute" or "mutenormal" or "routemutenormal" => MfxTextCommandProperty.RouteMuteNormal,
+            "bypass" or "bypassed" => MfxTextCommandProperty.Bypass,
+            "inputgain" or "ingain" => MfxTextCommandProperty.InputGain,
+            "outputgain" or "outgain" => MfxTextCommandProperty.OutputGain,
+            "maingain" or "plugingain" or "gain" => MfxTextCommandProperty.MainGain,
+            "gainscale" or "scale" => MfxTextCommandProperty.GainScale,
+            "drygain" => MfxTextCommandProperty.DryGain,
+            "wetgain" => MfxTextCommandProperty.WetGain,
+            "mix" or "drywet" => MfxTextCommandProperty.Mix,
+            "width" or "stereowidth" or "outputwidth" => MfxTextCommandProperty.Width,
+            "inputpan" or "inpan" => MfxTextCommandProperty.InputPan,
+            "outputpan" or "outpan" => MfxTextCommandProperty.OutputPan,
+            "drypan" => MfxTextCommandProperty.DryPan,
+            "wetpan" => MfxTextCommandProperty.WetPan,
+            "threshold" or "thresh" => MfxTextCommandProperty.Threshold,
+            "ratio" or "compressionratio" => MfxTextCommandProperty.Ratio,
+            "attack" or "attacktime" => MfxTextCommandProperty.Attack,
+            "release" or "releasetime" => MfxTextCommandProperty.Release,
+            "hold" or "holdtime" => MfxTextCommandProperty.Hold,
+            "knee" or "kneewidth" => MfxTextCommandProperty.Knee,
+            "range" or "reductionrange" => MfxTextCommandProperty.Range,
+            "makeupgain" or "makeup" => MfxTextCommandProperty.MakeupGain,
+            "ceiling" or "outputceiling" => MfxTextCommandProperty.Ceiling,
+            "lookahead" or "lookaheadtime" => MfxTextCommandProperty.Lookahead,
+            "rate" or "speed" => MfxTextCommandProperty.Rate,
+            "depth" => MfxTextCommandProperty.Depth,
+            "feedback" => MfxTextCommandProperty.Feedback,
+            "drive" => MfxTextCommandProperty.Drive,
+            "tone" => MfxTextCommandProperty.Tone,
+            "mode" => MfxTextCommandProperty.Mode,
+            "ab" or "compare" => MfxTextCommandProperty.Ab,
+            "program" or "preset" => MfxTextCommandProperty.Program,
+            "editor" => MfxTextCommandProperty.Editor,
+            "reload" => MfxTextCommandProperty.Reload,
+            "parameter" => MfxTextCommandProperty.Parameter,
+            _ => throw new InvalidOperationException($"Unsupported MFX property: {value}")
         };
     }
 
-    private static VfxTextCommandOperator ParseOperator(string value)
+    private static MfxTextCommandOperator ParseOperator(string value)
     {
         return value switch
         {
-            "+=" => VfxTextCommandOperator.Add,
-            "-=" => VfxTextCommandOperator.Subtract,
-            _ => VfxTextCommandOperator.Set
+            "+=" => MfxTextCommandOperator.Add,
+            "-=" => MfxTextCommandOperator.Subtract,
+            _ => MfxTextCommandOperator.Set
         };
     }
 
-    private static VfxTextCommandChannelSelection ParseChannels(string value)
+    private static MfxTextCommandChannelSelection ParseChannels(string value)
     {
         var text = value.Trim();
         if (text.Equals("all", StringComparison.OrdinalIgnoreCase) || text == "*")
         {
-            return new VfxTextCommandChannelSelection(IsAll: true, []);
+            return new MfxTextCommandChannelSelection(IsAll: true, []);
         }
 
         var channels = new List<int>();
@@ -294,16 +294,16 @@ internal static partial class VfxTextCommandParser
             throw new InvalidOperationException("At least one channel must be selected.");
         }
 
-        return new VfxTextCommandChannelSelection(IsAll: false, channels);
+        return new MfxTextCommandChannelSelection(IsAll: false, channels);
     }
 
     [GeneratedRegex(
-        @"^\s*VFX\.VST\((?<target>\d+)\)\.(?:(?<property>Parameter)\((?<parameterIndex>\d+)\)|(?<property>Enable|Enabled|Bypass|Bypassed|InputGain|InGain|OutputGain|OutGain|MainGain|PluginGain|Gain|GainScale|Scale|DryGain|WetGain|Mix|DryWet|Width|StereoWidth|OutputWidth|InputPan|InPan|OutputPan|OutPan|DryPan|WetPan|Threshold|Thresh|Ratio|CompressionRatio|Attack|AttackTime|Release|ReleaseTime|Hold|HoldTime|Knee|KneeWidth|Range|ReductionRange|MakeupGain|Makeup|Ceiling|OutputCeiling|Lookahead|LookaheadTime|Rate|Speed|Depth|Feedback|Drive|Tone|Mode|AB|Compare|Program|Preset|Editor|Reload))\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
+        @"^\s*MFX\.VST\((?<target>\d+)\)\.(?:(?<property>Parameter)\((?<parameterIndex>\d+)\)|(?<property>Enable|Enabled|Bypass|Bypassed|InputGain|InGain|OutputGain|OutGain|MainGain|PluginGain|Gain|GainScale|Scale|DryGain|WetGain|Mix|DryWet|Width|StereoWidth|OutputWidth|InputPan|InPan|OutputPan|OutPan|DryPan|WetPan|Threshold|Thresh|Ratio|CompressionRatio|Attack|AttackTime|Release|ReleaseTime|Hold|HoldTime|Knee|KneeWidth|Range|ReductionRange|MakeupGain|Makeup|Ceiling|OutputCeiling|Lookahead|LookaheadTime|Rate|Speed|Depth|Feedback|Drive|Tone|Mode|AB|Compare|Program|Preset|Editor|Reload))\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VstCommandPattern();
 
     [GeneratedRegex(
-        @"^\s*VFX\.(?<targetKind>Strip|Bus)\((?<target>[^)]+)\)\.Ch\((?<channels>[^)]+)\)\.(?<property>Enable|Enabled|Delay|DelayMs|Ms|Volume|Vol|Gain|Route|RouteEnable|RouteEnabled|RouteMute|MuteRoute|MuteNormal|RouteMuteNormal)\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
+        @"^\s*MFX\.(?<targetKind>Strip|Bus)\((?<target>[^)]+)\)\.Ch\((?<channels>[^)]+)\)\.(?<property>Enable|Enabled|Delay|DelayMs|Ms|Volume|Vol|Gain|Route|RouteEnable|RouteEnabled|RouteMute|MuteRoute|MuteNormal|RouteMuteNormal)\s*(?<op>\+=|-=|=)\s*(?<value>.+?)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CommandPattern();
 

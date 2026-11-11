@@ -342,7 +342,7 @@ Use only one engine mode at a time. If VoiceMeeter changes sample rate or block
 size, the ASIO host follows the driver format and restarts its audio path when
 required.
 
-## VBAN-TEXT And VFX Commands
+## VBAN-TEXT And MFX Commands
 
 Expand **VBAN Text** to control the app from VoiceMeeter MacroButtons or another
 VBAN-TEXT sender.
@@ -350,11 +350,11 @@ VBAN-TEXT sender.
 - default port: `6981`
 - default stream: `Command1`
 - **Local only** accepts commands only from the same PC
-- **VFX Commands** opens the in-app command reference
+- **MFX Commands** opens the in-app command reference
 
-VFX commands can control delay, volume, routes, VST enable, VST bypass, editor
+MFX commands can control delay, volume, routes, VST enable, VST bypass, editor
 open/close, reload, presets, friendly plugin controls, and indexed parameters.
-See [VFX Text Commands](../VFX_COMMANDS.md) for syntax and examples.
+See [MFX Text Commands](../MFX_COMMANDS.md) for syntax and examples.
 
 ## Tray And VoiceMeeter Button
 
@@ -405,6 +405,6 @@ Use the collapsible in-app log first when diagnosing:
 ## More Help
 
 - [Ctrl-click routing](CtrlClickRouting.md)
-- [VFX commands](../VFX_COMMANDS.md)
+- [MFX commands](../MFX_COMMANDS.md)
 - [VST2 workflow](VST2Workflow.md)
 - [Risks and limitations](RisksAndLimitations.md)

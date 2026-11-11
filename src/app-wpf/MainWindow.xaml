@@ -372,11 +372,11 @@
                          ToolTip="UDP port used by the VBAN-TEXT command listener." />
                                 <Button Grid.Row="0"
                         Grid.Column="3"
-                        Content="VFX Commands"
+                        Content="MFX Commands"
                         Width="124"
                         Margin="8,0,0,0"
                         Style="{StaticResource VbanButton}"
-                        Click="OpenVfxCommandsButton_Click" />
+                        Click="OpenMfxCommandsButton_Click" />
 
                                 <StackPanel Grid.Row="1"
                             Grid.ColumnSpan="4"

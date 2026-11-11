@@ -3,13 +3,13 @@ using System.Windows.Controls;
 
 namespace Elka.VoiceMeeterFxHost.App;
 
-internal sealed class VfxCommandsWindow : Window
+internal sealed class MfxCommandsWindow : Window
 {
     private readonly TextBox _commandsTextBox;
 
-    public VfxCommandsWindow()
+    public MfxCommandsWindow()
     {
-        Title = "VFX Text Commands";
+        Title = "MFX Text Commands";
         Width = 820;
         Height = 680;
         MinWidth = 640;
@@ -26,7 +26,7 @@ internal sealed class VfxCommandsWindow : Window
 
         root.Children.Add(new TextBlock
         {
-            Text = "VFX Text Command Reference",
+            Text = "MFX Text Command Reference",
             FontSize = 22,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 12)
@@ -77,11 +77,11 @@ internal sealed class VfxCommandsWindow : Window
     }
 
     private const string CommandReference = """
-Elka VoiceMeeter FX Host VFX Text Commands
+Elka VoiceMeeter FX Host MFX Text Commands
 
 MacroButtons sends these over VBAN-TEXT:
 
-SendText("vban1", VFX.Strip(0).Ch(1).Delay=25;);
+SendText("vban1", MFX.Strip(0).Ch(1).Delay=25;);
 
 The MacroButtons VBAN-TEXT slot must use the same port and stream name as the app.
 Default app settings are port 6981 and stream Command1.
@@ -110,21 +110,21 @@ Ch(All)
 Ch(*)
 
 VST power and bypass by ID:
-SendText("vban1", VFX.VST(0).Enable=1;);
-SendText("vban1", VFX.VST(0).Enable=0;);
-SendText("vban1", VFX.VST(0).Enable=Toggle;);
-SendText("vban1", VFX.VST(0).Bypass=1;);
-SendText("vban1", VFX.VST(0).Bypass=0;);
-SendText("vban1", VFX.VST(0).Bypass=Toggle;);
+SendText("vban1", MFX.VST(0).Enable=1;);
+SendText("vban1", MFX.VST(0).Enable=0;);
+SendText("vban1", MFX.VST(0).Enable=Toggle;);
+SendText("vban1", MFX.VST(0).Bypass=1;);
+SendText("vban1", MFX.VST(0).Bypass=0;);
+SendText("vban1", MFX.VST(0).Bypass=Toggle;);
 
 Open Editor:
-SendText("vban1", VFX.VST(0).Editor=Open;);
+SendText("vban1", MFX.VST(0).Editor=Open;);
 
 Close Editor:
-SendText("vban1", VFX.VST(0).Editor=Close;);
+SendText("vban1", MFX.VST(0).Editor=Close;);
 
 Reload VST:
-SendText("vban1", VFX.VST(0).Reload=1;);
+SendText("vban1", MFX.VST(0).Reload=1;);
 
 Enable=0 stops VST processing and blocks the node output.
 Bypass=1 sends dry audio around the node. If the VST is enabled, it still receives
@@ -132,49 +132,49 @@ audio so its meters can keep moving, but its processed output is discarded.
 Enable=0 plus Bypass=1 keeps the VST off while dry audio passes around it.
 
 Exposed VST controls (only when a matching host parameter exists):
-SendText("vban1", VFX.VST(0).InputGain=-6 dB;);
-SendText("vban1", VFX.VST(0).OutputGain=-3 dB;);
-SendText("vban1", VFX.VST(0).MainGain=0 dB;);
-SendText("vban1", VFX.VST(0).GainScale=100%;);
-SendText("vban1", VFX.VST(0).DryGain=-12 dB;);
-SendText("vban1", VFX.VST(0).WetGain=0 dB;);
-SendText("vban1", VFX.VST(0).Mix=50%;);
-SendText("vban1", VFX.VST(0).Width=100%;);
-SendText("vban1", VFX.VST(0).InputPan=25%;);
-SendText("vban1", VFX.VST(0).OutputPan=-25%;);
-SendText("vban1", VFX.VST(0).DryPan=-25%;);
-SendText("vban1", VFX.VST(0).WetPan=25%;);
-SendText("vban1", VFX.VST(0).Threshold=-18 dB;);
-SendText("vban1", VFX.VST(0).Ratio=4.0;);
-SendText("vban1", VFX.VST(0).Attack=10 ms;);
-SendText("vban1", VFX.VST(0).Release=100 ms;);
-SendText("vban1", VFX.VST(0).Hold=25 ms;);
-SendText("vban1", VFX.VST(0).Knee=6 dB;);
-SendText("vban1", VFX.VST(0).Range=24 dB;);
-SendText("vban1", VFX.VST(0).MakeupGain=3 dB;);
-SendText("vban1", VFX.VST(0).Ceiling=-1 dB;);
-SendText("vban1", VFX.VST(0).Lookahead=2 ms;);
-SendText("vban1", VFX.VST(0).Rate=1.5 Hz;);
-SendText("vban1", VFX.VST(0).Depth=50%;);
-SendText("vban1", VFX.VST(0).Feedback=25%;);
-SendText("vban1", VFX.VST(0).Drive=6 dB;);
-SendText("vban1", VFX.VST(0).Tone=50%;);
-SendText("vban1", VFX.VST(0).Mode=Next;);
-SendText("vban1", VFX.VST(0).AB=B;);
-SendText("vban1", VFX.VST(0).AB=Toggle;);
+SendText("vban1", MFX.VST(0).InputGain=-6 dB;);
+SendText("vban1", MFX.VST(0).OutputGain=-3 dB;);
+SendText("vban1", MFX.VST(0).MainGain=0 dB;);
+SendText("vban1", MFX.VST(0).GainScale=100%;);
+SendText("vban1", MFX.VST(0).DryGain=-12 dB;);
+SendText("vban1", MFX.VST(0).WetGain=0 dB;);
+SendText("vban1", MFX.VST(0).Mix=50%;);
+SendText("vban1", MFX.VST(0).Width=100%;);
+SendText("vban1", MFX.VST(0).InputPan=25%;);
+SendText("vban1", MFX.VST(0).OutputPan=-25%;);
+SendText("vban1", MFX.VST(0).DryPan=-25%;);
+SendText("vban1", MFX.VST(0).WetPan=25%;);
+SendText("vban1", MFX.VST(0).Threshold=-18 dB;);
+SendText("vban1", MFX.VST(0).Ratio=4.0;);
+SendText("vban1", MFX.VST(0).Attack=10 ms;);
+SendText("vban1", MFX.VST(0).Release=100 ms;);
+SendText("vban1", MFX.VST(0).Hold=25 ms;);
+SendText("vban1", MFX.VST(0).Knee=6 dB;);
+SendText("vban1", MFX.VST(0).Range=24 dB;);
+SendText("vban1", MFX.VST(0).MakeupGain=3 dB;);
+SendText("vban1", MFX.VST(0).Ceiling=-1 dB;);
+SendText("vban1", MFX.VST(0).Lookahead=2 ms;);
+SendText("vban1", MFX.VST(0).Rate=1.5 Hz;);
+SendText("vban1", MFX.VST(0).Depth=50%;);
+SendText("vban1", MFX.VST(0).Feedback=25%;);
+SendText("vban1", MFX.VST(0).Drive=6 dB;);
+SendText("vban1", MFX.VST(0).Tone=50%;);
+SendText("vban1", MFX.VST(0).Mode=Next;);
+SendText("vban1", MFX.VST(0).AB=B;);
+SendText("vban1", MFX.VST(0).AB=Toggle;);
 
 Host programs/presets when the VST exposes more than one:
-SendText("vban1", VFX.VST(0).Program=1;);
-SendText("vban1", VFX.VST(0).Program=Next;);
-SendText("vban1", VFX.VST(0).Program=Previous;);
+SendText("vban1", MFX.VST(0).Program=1;);
+SendText("vban1", MFX.VST(0).Program=Next;);
+SendText("vban1", MFX.VST(0).Program=Previous;);
 
 Any exposed host parameter by index:
-SendText("vban1", VFX.VST(0).Parameter(580)=-6 dB;);
+SendText("vban1", MFX.VST(0).Parameter(580)=-6 dB;);
 
 Relative numeric VST adjustments:
-SendText("vban1", VFX.VST(0).InputGain+=1 dB;);
-SendText("vban1", VFX.VST(0).OutputGain-=1 dB;);
-SendText("vban1", VFX.VST(0).Parameter(580)+=0.5 dB;);
+SendText("vban1", MFX.VST(0).InputGain+=1 dB;);
+SendText("vban1", MFX.VST(0).OutputGain-=1 dB;);
+SendText("vban1", MFX.VST(0).Parameter(580)+=0.5 dB;);
 
 += adds to the current displayed value and -= subtracts from it. The forms =5,
 =+5, and =-5 are absolute assignments and do not accumulate on repeated presses.
@@ -188,37 +188,37 @@ Use right-click Info on the loaded VST to find its parameter indexes. Indexes be
 to that exact plugin version and may change when the plugin is updated.
 
 Enable delay/volume processing:
-SendText("vban1", VFX.Strip(0).Ch(1).Enable=1;);
-SendText("vban1", VFX.Strip(0).Ch(1).Enable=0;);
-SendText("vban1", VFX.Bus(B1).Ch(1).Enable=1;);
+SendText("vban1", MFX.Strip(0).Ch(1).Enable=1;);
+SendText("vban1", MFX.Strip(0).Ch(1).Enable=0;);
+SendText("vban1", MFX.Bus(B1).Ch(1).Enable=1;);
 
 Delay:
-SendText("vban1", VFX.Strip(0).Ch(1).Delay=25;);
-SendText("vban1", VFX.Strip(0).Ch(1).Delay+=10;);
-SendText("vban1", VFX.Strip(0).Ch(1).Delay-=10;);
-SendText("vban1", VFX.Bus(B1).Ch(1).Delay=25;);
+SendText("vban1", MFX.Strip(0).Ch(1).Delay=25;);
+SendText("vban1", MFX.Strip(0).Ch(1).Delay+=10;);
+SendText("vban1", MFX.Strip(0).Ch(1).Delay-=10;);
+SendText("vban1", MFX.Bus(B1).Ch(1).Delay=25;);
 
 Volume:
-SendText("vban1", VFX.Strip(0).Ch(1).Volume=100;);
-SendText("vban1", VFX.Strip(0).Ch(1).Volume+=5;);
-SendText("vban1", VFX.Strip(0).Ch(1).Volume-=5;);
-SendText("vban1", VFX.Bus(B1).Ch(1).Volume=100;);
+SendText("vban1", MFX.Strip(0).Ch(1).Volume=100;);
+SendText("vban1", MFX.Strip(0).Ch(1).Volume+=5;);
+SendText("vban1", MFX.Strip(0).Ch(1).Volume-=5;);
+SendText("vban1", MFX.Bus(B1).Ch(1).Volume=100;);
 
 Direct routing, input strips only:
-SendText("vban1", VFX.Strip(0).Ch(1).Route=Bus(B1).Ch(3););
-SendText("vban1", VFX.Strip(0).Ch(1).Route+=Bus(B2).Ch(4););
-SendText("vban1", VFX.Strip(0).Ch(1).Route-=Bus(B1).Ch(3););
+SendText("vban1", MFX.Strip(0).Ch(1).Route=Bus(B1).Ch(3););
+SendText("vban1", MFX.Strip(0).Ch(1).Route+=Bus(B2).Ch(4););
+SendText("vban1", MFX.Strip(0).Ch(1).Route-=Bus(B1).Ch(3););
 
 Enable saved route destinations:
-SendText("vban1", VFX.Strip(0).Ch(1).RouteEnable=1;);
-SendText("vban1", VFX.Strip(0).Ch(1).RouteEnable=0;);
+SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=1;);
+SendText("vban1", MFX.Strip(0).Ch(1).RouteEnable=0;);
 
 Mute standard routing for a routed input channel:
-SendText("vban1", VFX.Strip(0).Ch(1).MuteNormal=1;);
-SendText("vban1", VFX.Strip(0).Ch(1).MuteNormal=0;);
+SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=1;);
+SendText("vban1", MFX.Strip(0).Ch(1).MuteNormal=0;);
 
 Combined commands:
-SendText("vban1", VFX.Strip(5).Ch(1).Route=Bus(B1).Ch(1); VFX.Strip(5).Ch(1).MuteNormal=1; VFX.Strip(5).Ch(1).Delay=20;);
+SendText("vban1", MFX.Strip(5).Ch(1).Route=Bus(B1).Ch(1); MFX.Strip(5).Ch(1).MuteNormal=1; MFX.Strip(5).Ch(1).Delay=20;);
 
 Aliases
 

@@ -66,23 +66,23 @@ public partial class MainWindow
                 MarkPluginSavedDataPending(node);
                 pending = GetPendingPluginRestore(node)!;
                 fake.BeforeControl = () => Assert(!HasPendingSavedPluginData(node), "Pending ends before a named/parameter/preset command reaches the plugin");
-                ApplyVfxTextCommandToPlugin(VfxTextCommandParser.ParseScript($"VFX.VST(10).{command}").Single());
+                ApplyMfxTextCommandToPlugin(MfxTextCommandParser.ParseScript($"MFX.VST(10).{command}").Single());
                 fake.Writes.Clear();
                 ReapplySavedPluginDataBySlot([pending], finalAttempt: true);
                 CapturePluginNodeStates();
-                Assert(node.PluginStateBase64 == fake.State && fake.State.StartsWith("user:"), "VFX change is saved without opening editor");
+                Assert(node.PluginStateBase64 == fake.State && fake.State.StartsWith("user:"), "MFX change is saved without opening editor");
                 OpenPluginEditorWithSavedData(node); PumpFloatingAnimation();
-                Assert(fake.Writes.Count == 0, "Canceled delayed/editor retries cannot overwrite a VFX change");
+                Assert(fake.Writes.Count == 0, "Canceled delayed/editor retries cannot overwrite a MFX change");
             }
             fake.BeforeControl = null;
 
             MarkPluginSavedDataPending(node);
             pending = GetPendingPluginRestore(node)!;
-            ApplyVfxTextCommandToPlugin(VfxTextCommandParser.ParseScript("VFX.VST(10).Bypass=1;").Single());
-            ApplyVfxTextCommandToPlugin(VfxTextCommandParser.ParseScript("VFX.VST(10).Enable=0;").Single());
+            ApplyMfxTextCommandToPlugin(MfxTextCommandParser.ParseScript("MFX.VST(10).Bypass=1;").Single());
+            ApplyMfxTextCommandToPlugin(MfxTextCommandParser.ParseScript("MFX.VST(10).Enable=0;").Single());
             Assert(ReferenceEquals(GetPendingPluginRestore(node), pending), "Actual bypass/power changes leave pending alone");
-            ApplyVfxTextCommandToPlugin(VfxTextCommandParser.ParseScript("VFX.VST(10).Bypass=0;").Single());
-            ApplyVfxTextCommandToPlugin(VfxTextCommandParser.ParseScript("VFX.VST(10).Enable=1;").Single());
+            ApplyMfxTextCommandToPlugin(MfxTextCommandParser.ParseScript("MFX.VST(10).Bypass=0;").Single());
+            ApplyMfxTextCommandToPlugin(MfxTextCommandParser.ParseScript("MFX.VST(10).Enable=1;").Single());
             Assert(ReferenceEquals(GetPendingPluginRestore(node), pending), "Bypass/power commands leave pending alone");
             fake.Writes.Clear();
             ReloadSavedPluginSettingsNow(node);
@@ -148,7 +148,7 @@ public partial class MainWindow
             ReapplySavedPluginDataBySlot([pending]);
             Assert(!_pluginNodesPendingSavedDataApply.Contains(node.Slot) && fake.Writes.Count == 0,
                 "Removed nodes end pending without applying data to reused slots");
-            Console.WriteLine("PASS: bounded normal-node restore, real delayed/timer completion, live saves, late editors, VFX/named controls, manual reload, copy/rebuild and stale-slot/exception checks.");
+            Console.WriteLine("PASS: bounded normal-node restore, real delayed/timer completion, live saves, late editors, MFX/named controls, manual reload, copy/rebuild and stale-slot/exception checks.");
         }
         finally
         {

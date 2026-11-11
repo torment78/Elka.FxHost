@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _pluginScanTimer;
     private DispatcherTimer? _startupDelayTimer;
     private VbanTextListener? _vbanTextListener;
-    private VfxCommandsWindow? _vfxCommandsWindow;
+    private MfxCommandsWindow? _mfxCommandsWindow;
     private PluginScanProgressWindow? _pluginScanWindow;
     private FxHostSettings _settings = new();
     private VoicemeeterKind _kind = VoicemeeterKind.Potato;
@@ -934,26 +934,26 @@ public partial class MainWindow : Window
     }
 
 
-    private void OpenVfxCommandsButton_Click(object sender, RoutedEventArgs e)
+    private void OpenMfxCommandsButton_Click(object sender, RoutedEventArgs e)
     {
-        OpenVfxCommandsWindow();
+        OpenMfxCommandsWindow();
     }
 
-    private void OpenVfxCommandsWindow()
+    private void OpenMfxCommandsWindow()
     {
-        if (_vfxCommandsWindow is { IsVisible: true } existingWindow)
+        if (_mfxCommandsWindow is { IsVisible: true } existingWindow)
         {
             existingWindow.Activate();
             return;
         }
 
-        _vfxCommandsWindow = new VfxCommandsWindow
+        _mfxCommandsWindow = new MfxCommandsWindow
         {
             Owner = this
         };
-        _vfxCommandsWindow.Closed += (_, _) => _vfxCommandsWindow = null;
-        _vfxCommandsWindow.Show();
-        _vfxCommandsWindow.Activate();
+        _mfxCommandsWindow.Closed += (_, _) => _mfxCommandsWindow = null;
+        _mfxCommandsWindow.Show();
+        _mfxCommandsWindow.Activate();
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -2380,7 +2380,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var commands = VfxTextCommandParser.ParseScript(message.Text);
+            var commands = MfxTextCommandParser.ParseScript(message.Text);
             if (commands.Count == 0)
             {
                 return;
@@ -2389,7 +2389,7 @@ public partial class MainWindow : Window
             var selectedEndpointChanged = false;
             foreach (var command in commands)
             {
-                selectedEndpointChanged |= ApplyVfxTextCommand(command);
+                selectedEndpointChanged |= ApplyMfxTextCommand(command);
             }
 
             RefreshEndpointButtonSelection();
@@ -2408,35 +2408,35 @@ public partial class MainWindow : Window
 
             FlushQueuedChannelChanges();
             QueueSave();
-            AppendLog($"VFX text {message.RemoteAddress} {message.StreamName}: applied {commands.Count} command(s).");
+            AppendLog($"MFX text {message.RemoteAddress} {message.StreamName}: applied {commands.Count} command(s).");
         }
         catch (Exception ex)
         {
-            AppendLog($"VFX text command error from {message.RemoteAddress}: {ex.Message}");
+            AppendLog($"MFX text command error from {message.RemoteAddress}: {ex.Message}");
         }
     }
 
-    private bool ApplyVfxTextCommand(VfxTextCommand command)
+    private bool ApplyMfxTextCommand(MfxTextCommand command)
     {
-        if (!_advancedModeActive && command.TargetKind != VfxTextCommandTargetKind.Vst)
+        if (!_advancedModeActive && command.TargetKind != MfxTextCommandTargetKind.Vst)
             throw new InvalidOperationException("Channel commands require Advanced mode. VST commands remain available.");
 
-        if (command.TargetKind == VfxTextCommandTargetKind.Vst)
+        if (command.TargetKind == MfxTextCommandTargetKind.Vst)
         {
-            ApplyVfxTextCommandToPlugin(command);
+            ApplyMfxTextCommandToPlugin(command);
             return false;
         }
 
-        if (command.Property is VfxTextCommandProperty.Route or VfxTextCommandProperty.RouteEnable or VfxTextCommandProperty.RouteMuteNormal
-            && command.TargetKind != VfxTextCommandTargetKind.Strip)
+        if (command.Property is MfxTextCommandProperty.Route or MfxTextCommandProperty.RouteEnable or MfxTextCommandProperty.RouteMuteNormal
+            && command.TargetKind != MfxTextCommandTargetKind.Strip)
         {
             throw new InvalidOperationException($"{command.SourceText}: route commands only support Strip targets.");
         }
 
-        var mode = command.TargetKind == VfxTextCommandTargetKind.Strip
+        var mode = command.TargetKind == MfxTextCommandTargetKind.Strip
             ? CallbackMode.Input
             : CallbackMode.Output;
-        var endpoint = ResolveVfxEndpoint(command);
+        var endpoint = ResolveMfxEndpoint(command);
         var settings = GetOrCreateChannelSettings(mode, endpoint);
         var offsets = command.Channels.GetZeroBasedChannels(endpoint.ChannelCount).ToArray();
         if (offsets.Length == 0)
@@ -2446,14 +2446,14 @@ public partial class MainWindow : Window
 
         foreach (var offset in offsets)
         {
-            ApplyVfxTextCommandToChannel(settings, offset, command);
+            ApplyMfxTextCommandToChannel(settings, offset, command);
         }
 
         QueueChannelApply(settings);
         return _selectedChannelSettings?.Key == settings.Key;
     }
 
-    private void ApplyVfxTextCommandToPlugin(VfxTextCommand command)
+    private void ApplyMfxTextCommandToPlugin(MfxTextCommand command)
     {
 
         if (!int.TryParse(command.Target, NumberStyles.Integer, CultureInfo.InvariantCulture, out var instanceId) ||
@@ -2474,47 +2474,47 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"{command.SourceText}: VST ID {instanceId} is a missing plugin placeholder.");
         }
 
-        if (command.Property == VfxTextCommandProperty.Enable)
+        if (command.Property == MfxTextCommandProperty.Enable)
         {
-            if (command.Operator != VfxTextCommandOperator.Set)
+            if (command.Operator != MfxTextCommandOperator.Set)
             {
                 throw new InvalidOperationException($"{command.SourceText}: VST Enable only supports '='.");
             }
 
             var enabled = command.ValueText.Trim().Equals("Toggle", StringComparison.OrdinalIgnoreCase)
                 ? !node.Enabled
-                : VfxTextCommandParser.ParseBoolean(command.ValueText);
+                : MfxTextCommandParser.ParseBoolean(command.ValueText);
             if (node.Enabled != enabled)
             {
                 SetNodeEnabled(node, enabled);
             }
 
-            AppendLog($"VST ID {instanceId} ({node.Name}) turned {(enabled ? "on" : "off")} by VFX text command.");
+            AppendLog($"VST ID {instanceId} ({node.Name}) turned {(enabled ? "on" : "off")} by MFX text command.");
             return;
         }
 
-        if (command.Property == VfxTextCommandProperty.Bypass)
+        if (command.Property == MfxTextCommandProperty.Bypass)
         {
-            if (command.Operator != VfxTextCommandOperator.Set)
+            if (command.Operator != MfxTextCommandOperator.Set)
             {
                 throw new InvalidOperationException($"{command.SourceText}: VST Bypass only supports '='.");
             }
 
             var bypassed = command.ValueText.Trim().Equals("Toggle", StringComparison.OrdinalIgnoreCase)
                 ? !node.Bypassed
-                : VfxTextCommandParser.ParseBoolean(command.ValueText);
+                : MfxTextCommandParser.ParseBoolean(command.ValueText);
             if (node.Bypassed != bypassed)
             {
                 SetNodeBypass(node, bypassed);
             }
 
-            AppendLog($"VST ID {instanceId} ({node.Name}) bypass {(bypassed ? "enabled" : "disabled")} by VFX text command.");
+            AppendLog($"VST ID {instanceId} ({node.Name}) bypass {(bypassed ? "enabled" : "disabled")} by MFX text command.");
             return;
         }
 
-        if (command.Property == VfxTextCommandProperty.Editor)
+        if (command.Property == MfxTextCommandProperty.Editor)
         {
-            if (command.Operator != VfxTextCommandOperator.Set)
+            if (command.Operator != MfxTextCommandOperator.Set)
             {
                 throw new InvalidOperationException($"{command.SourceText}: VST Editor only supports '='.");
             }
@@ -2534,63 +2534,63 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"{command.SourceText}: VST Editor must be Open or Close.");
         }
 
-        if (command.Property == VfxTextCommandProperty.Reload)
+        if (command.Property == MfxTextCommandProperty.Reload)
         {
-            if (command.Operator != VfxTextCommandOperator.Set)
+            if (command.Operator != MfxTextCommandOperator.Set)
             {
                 throw new InvalidOperationException($"{command.SourceText}: VST Reload only supports '='.");
             }
 
-            if (VfxTextCommandParser.ParseBoolean(command.ValueText))
+            if (MfxTextCommandParser.ParseBoolean(command.ValueText))
             {
                 ReloadPluginNode(node);
             }
             return;
         }
 
-        var controlName = command.Property == VfxTextCommandProperty.Parameter
+        var controlName = command.Property == MfxTextCommandProperty.Parameter
             ? command.PluginParameterIndex is { } parameterIndex
                 ? $"Parameter({parameterIndex})"
                 : throw new InvalidOperationException($"{command.SourceText}: VST parameter index is missing.")
             : command.Property switch
             {
-                VfxTextCommandProperty.InputGain => "InputGain",
-                VfxTextCommandProperty.OutputGain => "OutputGain",
-                VfxTextCommandProperty.MainGain => "MainGain",
-                VfxTextCommandProperty.GainScale => "GainScale",
-                VfxTextCommandProperty.DryGain => "DryGain",
-                VfxTextCommandProperty.WetGain => "WetGain",
-                VfxTextCommandProperty.Mix => "Mix",
-                VfxTextCommandProperty.Width => "Width",
-                VfxTextCommandProperty.InputPan => "InputPan",
-                VfxTextCommandProperty.OutputPan => "OutputPan",
-                VfxTextCommandProperty.DryPan => "DryPan",
-                VfxTextCommandProperty.WetPan => "WetPan",
-                VfxTextCommandProperty.Threshold => "Threshold",
-                VfxTextCommandProperty.Ratio => "Ratio",
-                VfxTextCommandProperty.Attack => "Attack",
-                VfxTextCommandProperty.Release => "Release",
-                VfxTextCommandProperty.Hold => "Hold",
-                VfxTextCommandProperty.Knee => "Knee",
-                VfxTextCommandProperty.Range => "Range",
-                VfxTextCommandProperty.MakeupGain => "MakeupGain",
-                VfxTextCommandProperty.Ceiling => "Ceiling",
-                VfxTextCommandProperty.Lookahead => "Lookahead",
-                VfxTextCommandProperty.Rate => "Rate",
-                VfxTextCommandProperty.Depth => "Depth",
-                VfxTextCommandProperty.Feedback => "Feedback",
-                VfxTextCommandProperty.Drive => "Drive",
-                VfxTextCommandProperty.Tone => "Tone",
-                VfxTextCommandProperty.Mode => "Mode",
-                VfxTextCommandProperty.Ab => "AB",
-                VfxTextCommandProperty.Program => "Program",
+                MfxTextCommandProperty.InputGain => "InputGain",
+                MfxTextCommandProperty.OutputGain => "OutputGain",
+                MfxTextCommandProperty.MainGain => "MainGain",
+                MfxTextCommandProperty.GainScale => "GainScale",
+                MfxTextCommandProperty.DryGain => "DryGain",
+                MfxTextCommandProperty.WetGain => "WetGain",
+                MfxTextCommandProperty.Mix => "Mix",
+                MfxTextCommandProperty.Width => "Width",
+                MfxTextCommandProperty.InputPan => "InputPan",
+                MfxTextCommandProperty.OutputPan => "OutputPan",
+                MfxTextCommandProperty.DryPan => "DryPan",
+                MfxTextCommandProperty.WetPan => "WetPan",
+                MfxTextCommandProperty.Threshold => "Threshold",
+                MfxTextCommandProperty.Ratio => "Ratio",
+                MfxTextCommandProperty.Attack => "Attack",
+                MfxTextCommandProperty.Release => "Release",
+                MfxTextCommandProperty.Hold => "Hold",
+                MfxTextCommandProperty.Knee => "Knee",
+                MfxTextCommandProperty.Range => "Range",
+                MfxTextCommandProperty.MakeupGain => "MakeupGain",
+                MfxTextCommandProperty.Ceiling => "Ceiling",
+                MfxTextCommandProperty.Lookahead => "Lookahead",
+                MfxTextCommandProperty.Rate => "Rate",
+                MfxTextCommandProperty.Depth => "Depth",
+                MfxTextCommandProperty.Feedback => "Feedback",
+                MfxTextCommandProperty.Drive => "Drive",
+                MfxTextCommandProperty.Tone => "Tone",
+                MfxTextCommandProperty.Mode => "Mode",
+                MfxTextCommandProperty.Ab => "AB",
+                MfxTextCommandProperty.Program => "Program",
                 _ => throw new InvalidOperationException($"{command.SourceText}: unsupported VST property.")
             };
 
         var valueText = command.Operator switch
         {
-            VfxTextCommandOperator.Add => $"+={command.ValueText}",
-            VfxTextCommandOperator.Subtract => $"-={command.ValueText}",
+            MfxTextCommandOperator.Add => $"+={command.ValueText}",
+            MfxTextCommandOperator.Subtract => $"-={command.ValueText}",
             _ => command.ValueText
         };
         if (!SetPluginNodeNamedControl(node, controlName, valueText, out var status))
@@ -2601,14 +2601,25 @@ public partial class MainWindow : Window
         AppendLog($"VST ID {instanceId} ({node.Name}): {status}");
     }
 
-    private IoEndpoint ResolveVfxEndpoint(VfxTextCommand command)
+    private IoEndpoint ResolveMfxEndpoint(MfxTextCommand command)
     {
-        return command.TargetKind == VfxTextCommandTargetKind.Strip
-            ? ResolveVfxStripEndpoint(command.Target)
-            : ResolveVfxBusEndpoint(command.Target);
+        return command.TargetKind == MfxTextCommandTargetKind.Strip
+            ? ResolveMfxStripEndpoint(command.Target)
+            : ResolveMfxBusEndpoint(command.Target);
     }
 
-    private IoEndpoint ResolveVfxStripEndpoint(string targetText)
+    // Accepts "A1", "A1-A2", "FX A1", "FX In A1" / "FX Out A1-A2".
+    private IoEndpoint? FindFxNodeByName(IReadOnlyList<IoEndpoint> endpoints, string target)
+    {
+        var text = target.Trim();
+        foreach (var prefix in new[] { "FX In ", "FX Out ", "FX " })
+            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { text = text[prefix.Length..]; break; }
+        var wanted = NormalizeEndpointText("FX " + text);
+        return endpoints.FirstOrDefault(endpoint =>
+            string.Equals(NormalizeEndpointText(endpoint.Name), wanted, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private IoEndpoint ResolveMfxStripEndpoint(string targetText)
     {
         var endpoints = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind);
         var target = targetText.Trim();
@@ -2619,17 +2630,15 @@ public partial class MainWindow : Window
                 return endpoints[stripIndex];
             }
 
-            throw new InvalidOperationException($"Strip({stripIndex}) is not available for {VoicemeeterKindInfo.DisplayName(_kind)}.");
+            throw new InvalidOperationException($"Strip({stripIndex}) is not available: FX In has {endpoints.Count} nodes.");
         }
 
-        var normalizedTarget = NormalizeEndpointText(target);
-        var namedEndpoint = endpoints.FirstOrDefault(endpoint =>
-            string.Equals(NormalizeEndpointText(endpoint.Name), normalizedTarget, StringComparison.OrdinalIgnoreCase));
+        var namedEndpoint = FindFxNodeByName(endpoints, target);
         return namedEndpoint
             ?? throw new InvalidOperationException($"Unknown strip target: {targetText}");
     }
 
-    private IoEndpoint ResolveVfxBusEndpoint(string targetText)
+    private IoEndpoint ResolveMfxBusEndpoint(string targetText)
     {
         var endpoints = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         var target = targetText.Trim();
@@ -2640,58 +2649,54 @@ public partial class MainWindow : Window
                 return endpoints[busIndex];
             }
 
-            throw new InvalidOperationException($"Bus({busIndex}) is not available for {VoicemeeterKindInfo.DisplayName(_kind)}.");
+            throw new InvalidOperationException($"Bus({busIndex}) is not available: FX Out has {endpoints.Count} nodes.");
         }
 
-        var label = target.ToUpperInvariant();
-        var endpoint = endpoints.FirstOrDefault(item =>
-            item.Name.StartsWith(label + " ", StringComparison.OrdinalIgnoreCase)
-            || item.Name.StartsWith(label + " /", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(NormalizeEndpointText(item.Name), NormalizeEndpointText(label), StringComparison.OrdinalIgnoreCase));
+        var endpoint = FindFxNodeByName(endpoints, target);
         return endpoint
             ?? throw new InvalidOperationException($"Unknown bus target: {targetText}");
     }
 
-    private void ApplyVfxTextCommandToChannel(EndpointChannelSettings settings, int offset, VfxTextCommand command)
+    private void ApplyMfxTextCommandToChannel(EndpointChannelSettings settings, int offset, MfxTextCommand command)
     {
         switch (command.Property)
         {
-            case VfxTextCommandProperty.Enable:
-                if (command.Operator != VfxTextCommandOperator.Set)
+            case MfxTextCommandProperty.Enable:
+                if (command.Operator != MfxTextCommandOperator.Set)
                 {
                     throw new InvalidOperationException("Enable only supports '='.");
                 }
 
-                settings.Enabled[offset] = VfxTextCommandParser.ParseBoolean(command.ValueText);
+                settings.Enabled[offset] = MfxTextCommandParser.ParseBoolean(command.ValueText);
                 break;
 
-            case VfxTextCommandProperty.Delay:
-                settings.DelayMilliseconds[offset] = ApplyNumericVfxCommand(
+            case MfxTextCommandProperty.Delay:
+                settings.DelayMilliseconds[offset] = ApplyNumericMfxCommand(
                     currentValue: settings.DelayMilliseconds[offset],
                     command,
                     valueName: "Delay",
                     sanitize: static value => Math.Round(Math.Clamp(value, 0.0, 10_000.0)));
                 break;
 
-            case VfxTextCommandProperty.Volume:
-                settings.VolumePercent[offset] = ApplyNumericVfxCommand(
+            case MfxTextCommandProperty.Volume:
+                settings.VolumePercent[offset] = ApplyNumericMfxCommand(
                     currentValue: settings.VolumePercent[offset],
                     command,
                     valueName: "Volume",
                     sanitize: static value => Math.Round(Math.Clamp(value, 0.0, 200.0)));
                 break;
 
-            case VfxTextCommandProperty.Route:
-                ApplyVfxRouteDestinationCommand(settings, offset, command);
+            case MfxTextCommandProperty.Route:
+                ApplyMfxRouteDestinationCommand(settings, offset, command);
                 break;
 
-            case VfxTextCommandProperty.RouteEnable:
-                if (command.Operator != VfxTextCommandOperator.Set)
+            case MfxTextCommandProperty.RouteEnable:
+                if (command.Operator != MfxTextCommandOperator.Set)
                 {
                     throw new InvalidOperationException("RouteEnable only supports '='.");
                 }
 
-                settings.RouteEnabled[offset] = VfxTextCommandParser.ParseBoolean(command.ValueText);
+                settings.RouteEnabled[offset] = MfxTextCommandParser.ParseBoolean(command.ValueText);
                 if (settings.RouteEnabled[offset] && settings.RouteDestinations[offset].Count == 0)
                 {
                     settings.RouteDestinations[offset].Add(DefaultRouteDestination(offset));
@@ -2699,21 +2704,21 @@ public partial class MainWindow : Window
 
                 break;
 
-            case VfxTextCommandProperty.RouteMuteNormal:
-                if (command.Operator != VfxTextCommandOperator.Set)
+            case MfxTextCommandProperty.RouteMuteNormal:
+                if (command.Operator != MfxTextCommandOperator.Set)
                 {
                     throw new InvalidOperationException("MuteNormal only supports '='.");
                 }
 
-                settings.RouteMuteNormal[offset] = VfxTextCommandParser.ParseBoolean(command.ValueText);
+                settings.RouteMuteNormal[offset] = MfxTextCommandParser.ParseBoolean(command.ValueText);
                 break;
         }
     }
 
-    private void ApplyVfxRouteDestinationCommand(EndpointChannelSettings settings, int offset, VfxTextCommand command)
+    private void ApplyMfxRouteDestinationCommand(EndpointChannelSettings settings, int offset, MfxTextCommand command)
     {
-        var destinationText = VfxTextCommandParser.ParseRouteDestination(command.ValueText);
-        var bus = ResolveVfxBusEndpoint(destinationText.BusTarget);
+        var destinationText = MfxTextCommandParser.ParseRouteDestination(command.ValueText);
+        var bus = ResolveMfxBusEndpoint(destinationText.BusTarget);
         var destinationOffset = destinationText.OneBasedChannel - 1;
         if (destinationOffset < 0 || destinationOffset >= bus.ChannelCount)
         {
@@ -2722,20 +2727,20 @@ public partial class MainWindow : Window
 
         var destination = new RouteDestinationSnapshot
         {
-            BusIndex = GetVfxBusIndex(bus),
+            BusIndex = GetMfxBusIndex(bus),
             ChannelOffset = destinationOffset
         };
         var destinations = settings.RouteDestinations[offset];
 
         switch (command.Operator)
         {
-            case VfxTextCommandOperator.Set:
+            case MfxTextCommandOperator.Set:
                 destinations.Clear();
                 destinations.Add(destination);
                 settings.RouteEnabled[offset] = true;
                 break;
 
-            case VfxTextCommandOperator.Add:
+            case MfxTextCommandOperator.Add:
                 if (!settings.RouteEnabled[offset]
                     && destinations.Count == 1
                     && IsDefaultRouteDestination(offset, destinations[0]))
@@ -2751,7 +2756,7 @@ public partial class MainWindow : Window
                 settings.RouteEnabled[offset] = true;
                 break;
 
-            case VfxTextCommandOperator.Subtract:
+            case MfxTextCommandOperator.Subtract:
                 destinations.RemoveAll(item => item.BusIndex == destination.BusIndex && item.ChannelOffset == destination.ChannelOffset);
                 if (destinations.Count == 0)
                 {
@@ -2762,7 +2767,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private int GetVfxBusIndex(IoEndpoint bus)
+    private int GetMfxBusIndex(IoEndpoint bus)
     {
         var endpoints = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         for (var index = 0; index < endpoints.Count; index++)
@@ -2776,17 +2781,17 @@ public partial class MainWindow : Window
         throw new InvalidOperationException($"Unknown route bus: {bus.Name}");
     }
 
-    private static double ApplyNumericVfxCommand(
+    private static double ApplyNumericMfxCommand(
         double currentValue,
-        VfxTextCommand command,
+        MfxTextCommand command,
         string valueName,
         Func<double, double> sanitize)
     {
-        var value = VfxTextCommandParser.ParseNumber(command.ValueText, valueName);
+        var value = MfxTextCommandParser.ParseNumber(command.ValueText, valueName);
         var result = command.Operator switch
         {
-            VfxTextCommandOperator.Add => currentValue + value,
-            VfxTextCommandOperator.Subtract => currentValue - value,
+            MfxTextCommandOperator.Add => currentValue + value,
+            MfxTextCommandOperator.Subtract => currentValue - value,
             _ => value
         };
 
@@ -6954,22 +6959,22 @@ private void RefreshEndpointButtonSelection()
         output.AppendLine("Usable VBAN-TEXT commands");
         output.AppendLine();
         output.AppendLine("Always available:");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Enable=1;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Enable=0;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Enable=Toggle;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Bypass=1;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Bypass=0;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Bypass=Toggle;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Editor=Open;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Editor=Close;);");
-        output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Reload=1;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Enable=1;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Enable=0;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Enable=Toggle;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Bypass=1;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Bypass=0;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Bypass=Toggle;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Editor=Open;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Editor=Close;);");
+        output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Reload=1;);");
         output.AppendLine();
         output.AppendLine("Parameter values:");
         output.AppendLine("= sets an exact displayed value. += adds to the current value; -= subtracts from it.");
         output.AppendLine("For a ratio, =4.5 sets 4.5:1, +=0.05 adds 0.05, and -=1 subtracts 1.");
         output.AppendLine("Unit values work the same way, for example Parameter(<attack index>)=10 ms or +=0.5 ms.");
         output.AppendLine("Stepped controls also accept Next, Previous, and Default; two-position controls accept Toggle.");
-        output.AppendLine($"Example: SendText(\"vban1\", VFX.VST({id}).Parameter(0)=4.5;);");
+        output.AppendLine($"Example: SendText(\"vban1\", MFX.VST({id}).Parameter(0)=4.5;);");
 
         var entries = parameterInfo
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
@@ -7115,7 +7120,7 @@ private void RefreshEndpointButtonSelection()
             output.AppendLine("Programs exposed by this VST:");
             foreach (var program in programs)
             {
-                output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Program=<number|Next|Previous>;);");
+                output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Program=<number|Next|Previous>;);");
                 output.AppendLine($"  Current: {program.CurrentChoice} = {program.CurrentValue}");
                 if (!string.IsNullOrWhiteSpace(program.Choices))
                 {
@@ -7143,7 +7148,7 @@ private void RefreshEndpointButtonSelection()
                 }
 
                 output.AppendLine();
-                output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).{control.Control}={valuePlaceholder};);");
+                output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).{control.Control}={valuePlaceholder};);");
                 output.AppendLine($"  Parameter #{control.ParameterIndex}: {control.ParameterName}");
                 output.AppendLine(string.IsNullOrWhiteSpace(control.CurrentChoice)
                     ? $"  Current: {currentValue}"
@@ -7152,7 +7157,7 @@ private void RefreshEndpointButtonSelection()
                 {
                     output.AppendLine($"  Values: {control.Choices}");
                 }
-                output.AppendLine($"  Exact index: SendText(\"vban1\", VFX.VST({id}).Parameter({control.ParameterIndex})={valuePlaceholder};);");
+                output.AppendLine($"  Exact index: SendText(\"vban1\", MFX.VST({id}).Parameter({control.ParameterIndex})={valuePlaceholder};);");
             }
         }
 
@@ -7175,7 +7180,7 @@ private void RefreshEndpointButtonSelection()
                 }
 
                 output.AppendLine();
-                output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Parameter({parameter.ParameterIndex})=<value>;);");
+                output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Parameter({parameter.ParameterIndex})=<value>;);");
                 output.AppendLine($"  {parameter.ParameterName}");
                 output.AppendLine(string.IsNullOrWhiteSpace(parameter.CurrentChoice)
                     ? $"  Current: {currentValue}"
@@ -7191,11 +7196,11 @@ private void RefreshEndpointButtonSelection()
         output.AppendLine("Multiple commands can be sent together:");
         if (controls.Count >= 2)
         {
-            output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).{controls[0].Control}={ValuePlaceholder(controls[0].Control)}; VFX.VST({id}).{controls[1].Control}={ValuePlaceholder(controls[1].Control)};);");
+            output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).{controls[0].Control}={ValuePlaceholder(controls[0].Control)}; MFX.VST({id}).{controls[1].Control}={ValuePlaceholder(controls[1].Control)};);");
         }
         else
         {
-            output.AppendLine($"SendText(\"vban1\", VFX.VST({id}).Enable=1; VFX.VST({id}).Bypass=0;);");
+            output.AppendLine($"SendText(\"vban1\", MFX.VST({id}).Enable=1; MFX.VST({id}).Bypass=0;);");
         }
 
         return output.ToString();
@@ -12883,7 +12888,7 @@ private void RefreshEndpointButtonSelection()
         CloseFloatingPluginPanel();
         SaveSettings();
         _vbanTextListener?.Dispose();
-        _vfxCommandsWindow?.Close();
+        _mfxCommandsWindow?.Close();
         DisposeTrayIcon();
         CloseSignalMonitors();
         _engine.Dispose();

@@ -149,4 +149,4 @@ An empty group does not pass audio. Add and connect a VST inside it, or use
 ## Related Guides
 
 - [User Guide](UserGuide.md)
-- [VFX Text Commands](../VFX_COMMANDS.md)
+- [MFX Text Commands](../MFX_COMMANDS.md)
