@@ -55,7 +55,7 @@ See [docs/AsioDriver.md](docs/AsioDriver.md).
 ## Installer
 
 `scripts\publish-release.ps1` publishes the app and builds
-`artifactselease\ElkaFxHostSetup-v<version>.exe` with Inno Setup
+`artifacts\release\ElkaFxHostSetup-v<version>.exe` with Inno Setup
 (`installer/ElkaFxHost.iss`). One setup installs the app and the driver. It registers the
 driver silently, asks Matrix (32) / Matrix Coconut (64) / Custom (8–128), and the
 uninstaller removes the driver again. For silent installs, use `/VERYSILENT /CHANNELS=32`.
