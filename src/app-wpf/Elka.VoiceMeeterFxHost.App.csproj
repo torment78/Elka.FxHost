@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>0.1.0</Version>
-    <InformationalVersion>0.8.3.20</InformationalVersion>
+    <!-- Elka FX Host 0.1.1 includes upstream VoiceMeeter FX Host 0.8.3.21. -->
+    <Version>0.1.1</Version>
+    <InformationalVersion>0.1.1</InformationalVersion>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
