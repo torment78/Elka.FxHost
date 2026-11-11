@@ -7,7 +7,9 @@
    The build runs CMake and produces the engine, the plugin worker, `ElkaFxHost.Asio.dll`
    and `MatrixLinkLoopback.exe`. All of them land next to the app in
    `src\app-wpf\bin\Debug\net8.0-windows\win-x64\`.
-3. The app starts the ASIO link by itself. The **ASIO Link** panel shows the driver state.
+3. The ASIO link is always on while the app runs; there is no Start/Stop. The **ASIO Link**
+   panel shows the driver state. The driver itself is always listed in Matrix, even when
+   FX Host is closed (Matrix then gets silence on FX Out).
 
 VoiceMeeter is not needed and not used.
 
@@ -41,9 +43,13 @@ The loopback tool loads the DLL directly, so it does not need the driver registe
 
 ## Test in Matrix
 
+Matrix scans ASIO drivers when it starts, so restart Matrix once after installing.
+
 1. Register the driver, start FX Host, then open Matrix.
 2. Add the ASIO device **Elka FX Host**. Its outputs are `FX In A1…` and its inputs are `FX Out A1…`.
-3. Route a source into `FX In A1/A2`. In FX Host, cable `FX In A` → a VST → `FX Out A`.
+3. Route a source into `FX In A1/A2`. In FX Host every bank shows one mono pin per channel
+   (A1 … A8). Cable them to a VST, or Ctrl-click `FX In A`, Ctrl-click a VST, Ctrl-click
+   `FX Out A` and press Enter to wire the whole bank at once (one side only also works).
 4. Route `FX Out A1/A2` in Matrix to your speakers.
 
 Things to check: low buffer sizes (64/128), 44.1/48/96 kHz, starting and stopping FX Host

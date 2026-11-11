@@ -116,7 +116,7 @@ internal sealed class ChannelSettingsSnapshot
     public bool[] RouteMuteNormal { get; set; } = [];
     public bool PostInsertSend { get; set; }
     public List<List<RouteDestinationSnapshot>> RouteDestinations { get; set; } = [];
-    public EndpointPinMode PinMode { get; set; } = EndpointPinMode.Stereo;
+    public EndpointPinMode PinMode { get; set; } = EndpointPinMode.Full;
 }
 
 internal sealed class RouteDestinationSnapshot
@@ -174,10 +174,10 @@ internal sealed class EndpointChannelSettings
     public bool[] RouteEnabled { get; }
     public bool[] RouteMuteNormal { get; }
     public List<RouteDestinationSnapshot>[] RouteDestinations { get; }
-    public EndpointPinMode PinMode { get; set; } = EndpointPinMode.Stereo;
+    public EndpointPinMode PinMode { get; set; } = EndpointPinMode.Full;
     public bool PostInsertSend { get; set; }
     public bool HasActiveChannels => Enabled.Any(static enabled => enabled) || RouteEnabled.Any(static enabled => enabled);
-    public int CanvasPinCount => PinMode == EndpointPinMode.Full ? Endpoint.ChannelCount : Math.Min(2, Endpoint.ChannelCount);
+    public int CanvasPinCount => Endpoint.ChannelCount;
 
     public string Key => Endpoint.Key(Mode);
 

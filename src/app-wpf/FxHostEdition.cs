@@ -56,6 +56,14 @@ internal static class FxHostEdition
 
     public static string BankEndpointName(int bank) => $"FX {BankLetters(bank)}";
 
+    /// <summary>Mono channel short name as the driver reports it: A1, A2 ... P8.</summary>
+    public static string ChannelShortName(int channel) =>
+        $"{BankLetters(channel / ChannelsPerBank)}{channel % ChannelsPerBank + 1}";
+
+    /// <summary>Full channel name as Matrix shows it: "FX In A1" / "FX Out A1".</summary>
+    public static string ChannelName(int channel, bool outputSide) =>
+        (outputSide ? "FX Out " : "FX In ") + ChannelShortName(channel);
+
     /// <summary>Left side shows what Matrix sends in, right side what goes back out.</summary>
     public static string SideName(string endpointName, bool outputSide) =>
         endpointName.StartsWith("FX ", StringComparison.Ordinal)

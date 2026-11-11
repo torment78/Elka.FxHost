@@ -3570,9 +3570,7 @@ private void RefreshEndpointButtonSelection()
 
     private EndpointPinMode EndpointPinModeFor(CallbackMode mode, IoEndpoint endpoint)
     {
-        return _settingsByEndpoint.TryGetValue(endpoint.Key(mode), out var settings)
-            ? settings.PinMode
-            : EndpointPinMode.Stereo;
+        return EndpointPinMode.Full; // every ASIO channel is its own mono pin
     }
 
     private string EndpointPinModeLabel(CallbackMode mode, IoEndpoint endpoint)
@@ -3589,11 +3587,7 @@ private void RefreshEndpointButtonSelection()
 
     private void SetEndpointPinMode(CallbackMode mode, IoEndpoint endpoint, EndpointPinMode pinMode, bool refreshCallback = true)
     {
-        if (!CanChangeEndpointPinMode(endpoint))
-        {
-            pinMode = EndpointPinMode.Stereo;
-        }
-
+        pinMode = EndpointPinMode.Full; // banks always show all 8 mono pins
         var settings = GetOrCreateChannelSettings(mode, endpoint);
         settings.PinMode = pinMode;
 
@@ -3633,10 +3627,8 @@ private void RefreshEndpointButtonSelection()
         SetEndpointPinMode(mode, endpoint, nextMode);
     }
 
-    private static bool CanChangeEndpointPinMode(IoEndpoint endpoint)
-    {
-        return endpoint.ChannelCount > 2;
-    }
+    // Banks always show one mono pin per ASIO channel, so there is no minimize/expand.
+    private static bool CanChangeEndpointPinMode(IoEndpoint endpoint) => false;
 
     private string? EndpointRouteHueKey(string endpointKey)
     {
@@ -7400,14 +7392,7 @@ private void RefreshEndpointButtonSelection()
     private int CanvasPinCount(CallbackMode mode, IoEndpoint endpoint, bool outputSide)
     {
         var key = endpoint.Key(mode);
-        var configuredPinCount = _settingsByEndpoint.TryGetValue(key, out var settings)
-            ? settings.CanvasPinCount
-            : Math.Min(2, endpoint.ChannelCount);
-
-        return Math.Clamp(
-            configuredPinCount,
-            Math.Min(2, endpoint.ChannelCount),
-            endpoint.ChannelCount);
+        return endpoint.ChannelCount;
     }
 
     private int RequiredCanvasPinCountForRoutes(CallbackMode mode, IoEndpoint endpoint, bool outputSide)
@@ -7580,7 +7565,7 @@ private void RefreshEndpointButtonSelection()
                 Channel = channel,
                 Pin = offset,
                 Point = new Point(pinX, pinY),
-                Label = $"{FxHostEdition.SideName(endpoint.Name, outputSide)} {EndpointPinLabel(pinCount, offset)}"
+                Label = FxHostEdition.ChannelName(endpoint.Range.Start + offset, outputSide)
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
 
@@ -7603,7 +7588,7 @@ private void RefreshEndpointButtonSelection()
 
             var label = new TextBlock
             {
-                Text = EndpointPinLabel(pinCount, offset),
+                Text = FxHostEdition.ChannelShortName(endpoint.Range.Start + offset),
                 FontSize = 11,
                 Foreground = hueStroke ?? (Brush)FindResource("MutedTextBrush"),
                 ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide))
@@ -7640,7 +7625,7 @@ private void RefreshEndpointButtonSelection()
                 Channel = channel,
                 Pin = offset,
                 Point = point,
-                Label = $"{endpoint.Name} {EndpointPinLabel(endpoint.ChannelCount, offset)}"
+                Label = FxHostEdition.ChannelName(endpoint.Range.Start + offset, outputSide)
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
         }

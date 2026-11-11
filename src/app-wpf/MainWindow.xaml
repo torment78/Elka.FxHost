@@ -414,25 +414,9 @@
 
                                 <TextBlock Grid.Row="0"
                            Grid.Column="0"
-                           Text="Elka FX Host virtual ASIO driver"
+                           Text="Elka FX Host virtual ASIO driver (always on)"
                            Style="{StaticResource MutedText}"
                            VerticalAlignment="Center" />
-                                <StackPanel Grid.Row="0"
-                            Grid.Column="1"
-                            Orientation="Horizontal">
-                                    <Button Content="Start"
-                          Width="64"
-                          Padding="8,5"
-                          Margin="6,0,0,0"
-                          Style="{StaticResource AsioButton}"
-                          Click="StartAsioLinkButton_Click" />
-                                    <Button Content="Stop"
-                          Width="64"
-                          Padding="8,5"
-                          Margin="6,0,0,0"
-                          Style="{StaticResource AsioButton}"
-                          Click="StopAsioLinkButton_Click" />
-                                </StackPanel>
                                 <StackPanel Grid.Row="1" Grid.ColumnSpan="2">
                                     <TextBlock x:Name="AsioLinkDriverTextBlock" Margin="0,8,0,0"
                                                TextWrapping="Wrap" Style="{StaticResource MutedText}" />

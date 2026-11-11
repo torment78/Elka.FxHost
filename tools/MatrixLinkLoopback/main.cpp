@@ -37,6 +37,7 @@ struct Options
     double rate = 48000.0;
     int channel = 0;
     bool fakeHost = false;
+    bool viaCom = false;
     std::wstring driverPath;
 };
 
@@ -211,6 +212,7 @@ Options parse(int argc, wchar_t** argv)
         else if (arg == L"--rate") options.rate = std::stod(next());
         else if (arg == L"--channel") options.channel = std::stoi(next());
         else if (arg == L"--fake-host") options.fakeHost = true;
+        else if (arg == L"--com") options.viaCom = true;
         else if (arg == L"--driver") options.driverPath = next();
     }
     if (options.driverPath.empty())
@@ -224,7 +226,22 @@ int wmain(int argc, wchar_t** argv)
     const Options options = parse(argc, argv);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    HMODULE module = LoadLibraryW(options.driverPath.c_str());
+    HMODULE module = nullptr;
+    if (options.viaCom)
+    {
+        // Exactly what an ASIO host does: registry CLSID -> CoCreateInstance.
+        const HRESULT created = CoCreateInstance(elka::asio::CLSID_ElkaFxHostAsio, nullptr, CLSCTX_INPROC_SERVER,
+                                                 elka::asio::CLSID_ElkaFxHostAsio, reinterpret_cast<void**>(&g_driver));
+        if (FAILED(created) || g_driver == nullptr)
+        {
+            std::printf("FAIL: CoCreateInstance through the registry returned 0x%08lx\n", static_cast<unsigned long>(created));
+            return 2;
+        }
+        std::printf("Opened the registered driver through COM.\n");
+    }
+    else
+    {
+    module = LoadLibraryW(options.driverPath.c_str());
     if (module == nullptr)
     {
         std::wprintf(L"FAIL: could not load %ls (error %lu)\n", options.driverPath.c_str(), GetLastError());
@@ -244,6 +261,7 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
     factory->Release();
+    }
 
     if (g_driver->init(GetConsoleWindow()) != ASIOTrue)
     {
@@ -324,7 +342,8 @@ int wmain(int argc, wchar_t** argv)
 
     g_driver->disposeBuffers();
     g_driver->Release();
-    FreeLibrary(module);
+    if (module != nullptr)
+        FreeLibrary(module);
     CoUninitialize();
 
     const bool clockOk = expected > 0 && std::fabs(static_cast<double>(switches) / expected - 1.0) < 0.05;

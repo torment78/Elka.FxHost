@@ -29,6 +29,8 @@ public partial class MainWindow
         return changed;
     }
 
+    // Runs once at startup; the link then stays up for the life of the app. The driver
+    // itself is always listed in Matrix, whether or not FX Host is running.
     private void StartAsioLinkFromUi()
     {
         var status = _engine.StartAsioLink();
@@ -37,15 +39,6 @@ public partial class MainWindow
         RefreshAfterAsioLinkStateChange();
     }
 
-    private void StartAsioLinkButton_Click(object sender, RoutedEventArgs e) => StartAsioLinkFromUi();
-
-    private void StopAsioLinkButton_Click(object sender, RoutedEventArgs e)
-    {
-        var status = _engine.StopAsioLink();
-        AsioLinkStatusTextBlock.Text = status;
-        AppendLog(status);
-        RefreshAfterAsioLinkStateChange();
-    }
 
     private void AsioLinkToggleButton_Click(object sender, RoutedEventArgs e) => ToggleCardContent(AsioLinkContentGrid);
 
