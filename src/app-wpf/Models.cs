@@ -72,23 +72,14 @@ internal enum EndpointPinMode
 
 internal static class VoicemeeterIoLayout
 {
-    // Elka FX Host: both canvas sides are the driver's banks of 8 (FX In A..P on the left,
-    // FX Out A..P on the right). The bank count follows the configured ASIO channel count.
-    private static readonly IReadOnlyList<IoEndpoint> AsioBanks = Enumerable
-        .Range(0, FxHostEdition.BankCount)
-        .Select(static bank => new IoEndpoint(
-            FxHostEdition.BankEndpointName(bank),
-            new ChannelRange(bank * FxHostEdition.ChannelsPerBank, bank * FxHostEdition.ChannelsPerBank + FxHostEdition.ChannelsPerBank - 1)))
-        .ToArray();
+    // Elka FX Host: one mono node per ASIO channel, with linked groups merged.
+    // Output = the FX Out side, everything else = the FX In side.
+    public static IReadOnlyList<IoEndpoint> GetEndpoints(CallbackMode mode, VoicemeeterKind kind) =>
+        FxHostEdition.SideEndpoints(outputSide: mode == CallbackMode.Output);
 
-    public static IReadOnlyList<IoEndpoint> GetEndpoints(CallbackMode mode, VoicemeeterKind kind)
-    {
-        return AsioBanks;
-    }
+    public static IReadOnlyList<IoEndpoint> BuildCanvasInputs(VoicemeeterKind kind) => FxHostEdition.SideEndpoints(false);
 
-    public static IReadOnlyList<IoEndpoint> BuildCanvasInputs(VoicemeeterKind kind) => AsioBanks;
-
-    public static IReadOnlyList<IoEndpoint> BuildCanvasOutputs(VoicemeeterKind kind) => AsioBanks;
+    public static IReadOnlyList<IoEndpoint> BuildCanvasOutputs(VoicemeeterKind kind) => FxHostEdition.SideEndpoints(true);
 
     public static int InputChannelCount(VoicemeeterKind kind) => FxHostEdition.ChannelCount;
 
@@ -600,6 +591,9 @@ internal sealed class FloatingPanelSettings
 
 internal sealed class FxHostSettings
 {
+    // Linked channel groups per side, as "start-end" channel indexes (e.g. "0-1" = A1-A2).
+    public List<string> FxInLinks { get; set; } = [];
+    public List<string> FxOutLinks { get; set; } = [];
     public VoicemeeterKind Kind { get; set; } = VoicemeeterKind.Potato;
     public CallbackMode SelectedMode { get; set; } = CallbackMode.Input;
     public string? SelectedEndpointName { get; set; }

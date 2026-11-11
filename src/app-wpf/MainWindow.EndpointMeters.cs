@@ -141,21 +141,8 @@ public partial class MainWindow
 
     private TextBlock EndpointCardTitle(IoEndpoint endpoint, int pinCount)
     {
-        string name = endpoint.Name;
-        if (endpoint.ChannelCount > 2)
-        {
-            if (name.StartsWith('A') && name.EndsWith(" 8ch", StringComparison.Ordinal)) name = name[..^4];
-            if (name.StartsWith('B')) name = name.Split(' ', 2)[0];
-        }
         var title = new TextBlock { FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        title.Inlines.Add(new Run(name));
-        if (endpoint.ChannelCount > 2)
-            title.Inlines.Add(new Run(pinCount > 2 ? $" EXP {pinCount}" : " Min")
-            {
-                FontSize = 11,
-                FontWeight = FontWeights.Normal,
-                Foreground = (System.Windows.Media.Brush)FindResource("MutedTextBrush")
-            });
+        title.Inlines.Add(new Run(endpoint.Name));
         return title;
     }
 }

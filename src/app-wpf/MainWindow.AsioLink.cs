@@ -78,6 +78,58 @@ public partial class MainWindow
         if (AsioLinkStatusTextBlock.Text != status) AsioLinkStatusTextBlock.Text = status;
     }
 
+    /// <summary>
+    /// Ctrl-click two or more nodes on ONE side (FX In or FX Out), then Enter: they become
+    /// one linked node (stereo, or a wider group). Nothing else may be selected.
+    /// </summary>
+    private bool TryCompleteQuickChannelLink()
+    {
+        if (_quickGroupNodeSlots.Count > 0 || _quickGroupIds.Count > 0 || _quickGroupPluginChoices.Count > 0)
+            return false;
+
+        List<QuickGroupEndpoint> picked;
+        bool outputSide;
+        if (_quickConnectSourceEndpoints.Count >= 2 && _quickConnectDestinationEndpoints.Count == 0)
+        {
+            picked = _quickConnectSourceEndpoints;
+            outputSide = false;
+        }
+        else if (_quickConnectDestinationEndpoints.Count >= 2 && _quickConnectSourceEndpoints.Count == 0)
+        {
+            picked = _quickConnectDestinationEndpoints;
+            outputSide = true;
+        }
+        else
+        {
+            return false;
+        }
+
+        var linked = FxHostEdition.TryLink(outputSide, picked.Select(static item => item.Endpoint).ToList(), out var message);
+        AppendLog(message);
+        ClearQuickGroupChain(log: false);
+        if (linked)
+            SaveChannelLinks();
+        RebuildRoutingCanvas();
+        return true;
+    }
+
+    private void UnlinkChannels(IoEndpoint endpoint, bool outputSide)
+    {
+        if (!FxHostEdition.Unlink(outputSide, endpoint))
+            return;
+        AppendLog($"Unlinked {FxHostEdition.SideName(endpoint.Name, outputSide)} into mono nodes.");
+        SaveChannelLinks();
+        RebuildRoutingCanvas();
+    }
+
+    private void SaveChannelLinks()
+    {
+        _settings.FxInLinks = FxHostEdition.SaveLinks(outputSide: false);
+        _settings.FxOutLinks = FxHostEdition.SaveLinks(outputSide: true);
+        RefreshEngineCallbackMode();
+        QueueSave();
+    }
+
     private void EnsureAsioChannelCountSelector()
     {
         if (_asioChannelCountComboBox is not null) return;

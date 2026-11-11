@@ -47,9 +47,15 @@ Matrix scans ASIO drivers when it starts, so restart Matrix once after installin
 
 1. Register the driver, start FX Host, then open Matrix.
 2. Add the ASIO device **Elka FX Host**. Its outputs are `FX In A1…` and its inputs are `FX Out A1…`.
-3. Route a source into `FX In A1/A2`. In FX Host every bank shows one mono pin per channel
-   (A1 … A8). Cable them to a VST, or Ctrl-click `FX In A`, Ctrl-click a VST, Ctrl-click
-   `FX Out A` and press Enter to wire the whole bank at once (one side only also works).
+3. Route a source into `FX In A1/A2`. In FX Host every channel is its own mono node
+   (`FX In A1`, `FX In A2`, … 64 per side for Coconut).
+   - **Link nodes:** Ctrl-click two or more neighbouring nodes on one side (for example
+     FX In A1 and A2), then press Enter. They become one node, `FX In A1-A2` (stereo), or
+     wider, such as `A1-A6`. Each side links separately. Right-click a linked node and
+     choose **Unlink Channels** to split it into mono nodes again. Links are saved with
+     the session, and cables stay attached per channel.
+   - **Wire quickly:** Ctrl-click a node, Ctrl-click a VST, Ctrl-click an FX Out node,
+     then press Enter.
 4. Route `FX Out A1/A2` in Matrix to your speakers.
 
 Things to check: low buffer sizes (64/128), 44.1/48/96 kHz, starting and stopping FX Host

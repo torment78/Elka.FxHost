@@ -1571,13 +1571,14 @@ public partial class MainWindow : Window
             ? DefaultVbanControlStreamName
             : _settings.VbanControlStreamName.Trim();
         VbanLocalOnlyCheckBox.IsChecked = _settings.VbanControlLocalOnly;
-        MixerTypeTextBlock.Text = VoicemeeterKindInfo.DisplayName(_kind);
         UpdateHostStatusDisplay();
 
+        _settings.FxInLinks ??= [];
+        _settings.FxOutLinks ??= [];
+        FxHostEdition.LoadLinks(_settings.FxInLinks, _settings.FxOutLinks);
         foreach (var snapshot in _settings.Endpoints)
         {
-            var endpoint = VoicemeeterIoLayout
-                .GetEndpoints(snapshot.Mode, _kind)
+            var endpoint = FxHostEdition.AllEndpoints()
                 .FirstOrDefault(candidate => candidate.Name == snapshot.EndpointName);
             if (endpoint is null)
             {
@@ -3436,6 +3437,8 @@ private void RefreshEndpointButtonSelection()
         var hotkeyTarget = EndpointHotkeyReference(mode, endpoint, outputSide);
         menu.Items.Add(CreateNodeMenuItem("Hotkey", () => ShowEditorHotkeys(this, selectedEndpoint: hotkeyTarget)));
         menu.Items.Add(CreateNodeMenuItem("Select Section", () => SelectCanvasEndpoint(mode, endpoint)));
+        if (endpoint.ChannelCount > 1)
+            menu.Items.Add(CreateNodeMenuItem("Unlink Channels", () => UnlinkChannels(endpoint, outputSide)));
         menu.Items.Add(new Separator());
 
         if (CanChangeEndpointPinMode(endpoint))
@@ -7246,8 +7249,8 @@ private void RefreshEndpointButtonSelection()
 
         var leftMode = CanvasEndpointMode(outputSide: false);
         var rightMode = CanvasEndpointMode(outputSide: true);
-        var leftEndpoints = VoicemeeterIoLayout.GetEndpoints(leftMode, _kind);
-        var rightEndpoints = VoicemeeterIoLayout.GetEndpoints(rightMode, _kind);
+        var leftEndpoints = FxHostEdition.SideEndpoints(outputSide: false);
+        var rightEndpoints = FxHostEdition.SideEndpoints(outputSide: true);
         var rightX = VstRightEndpointX;
         var y = VstEndpointStackTop;
         foreach (var endpoint in leftEndpoints)
@@ -10838,8 +10841,7 @@ private void RefreshEndpointButtonSelection()
 
         foreach (var mode in new[] { CallbackMode.Input, CallbackMode.Output })
         {
-            var endpoint = VoicemeeterIoLayout
-                .GetEndpoints(mode, _kind)
+            var endpoint = FxHostEdition.AllEndpoints()
                 .FirstOrDefault(candidate => candidate.Key(mode) == key);
             if (endpoint is not null)
             {
@@ -12009,6 +12011,11 @@ private void RefreshEndpointButtonSelection()
             _quickGroupPluginChoices.Count == 0)
         {
             return false;
+        }
+
+        if (TryCompleteQuickChannelLink())
+        {
+            return true;
         }
 
         if (ShouldCompleteQuickEndpointConnections())
