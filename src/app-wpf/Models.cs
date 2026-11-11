@@ -36,16 +36,50 @@ internal static class VoicemeeterKindInfo
     }
 }
 
+/// <summary>
+/// The ASIO channels behind one canvas node. Usually a run Start..End; a node linked
+/// from scattered channels (A1, A3, A5 in click order) carries them in Members.
+/// </summary>
 internal sealed record ChannelRange(int Start, int End)
 {
-    public int Count => End - Start + 1;
+    public IReadOnlyList<int>? Members { get; init; }
+
+    public static ChannelRange FromChannels(IReadOnlyList<int> channels)
+    {
+        var contiguous = channels.Select((channel, index) => channel - index).Distinct().Count() == 1;
+        return contiguous
+            ? new ChannelRange(channels[0], channels[^1])
+            : new ChannelRange(channels.Min(), channels.Max()) { Members = channels.ToArray() };
+    }
+
+    public int Count => Members?.Count ?? End - Start + 1;
+    public bool IsContiguous => Members is null;
+    public int ChannelAt(int offset) => Members is { } members ? members[offset] : Start + offset;
+    public bool Contains(int channel) => Members is { } members ? members.Contains(channel) : channel >= Start && channel <= End;
+    public int OffsetOf(int channel) => Members is { } members ? IndexOf(members, channel) : channel - Start;
+    public IEnumerable<int> Channels => Members ?? Enumerable.Range(Start, End - Start + 1);
+
+    private static int IndexOf(IReadOnlyList<int> members, int channel)
+    {
+        for (var index = 0; index < members.Count; index++)
+            if (members[index] == channel) return index;
+        return -1;
+    }
+
+    public bool Equals(ChannelRange? other) =>
+        other is not null && Start == other.Start && End == other.End &&
+        (Members ?? []).SequenceEqual(other.Members ?? []);
+
+    public override int GetHashCode() => HashCode.Combine(Start, End, Members?.Count ?? 0);
 }
 
 internal sealed record IoEndpoint(string Name, ChannelRange Range)
 {
     public int ChannelCount => Range.Count;
 
-    public string DisplayName => Range.Start == Range.End
+    public string DisplayName => !Range.IsContiguous
+        ? Name
+        : Range.Start == Range.End
         ? $"{Name} ({Range.Start + 1})"
         : $"{Name} ({Range.Start + 1}-{Range.End + 1})";
 
@@ -264,8 +298,8 @@ internal sealed class EndpointChannelSettings
                 var routeGainPercent = CombinedRouteGainPercent(VolumePercent[offset], destination.GainDecibels);
                 yield return new DirectRouteSummary(
                     PostInsertSend ? CallbackMode.Main : CallbackMode.Input,
-                    Endpoint.Range.Start + offset,
-                    bus.Range.Start + destinationOffset,
+                    Endpoint.Range.ChannelAt(offset),
+                    bus.Range.ChannelAt(destinationOffset),
                     (int)Math.Round(routeDelayMilliseconds),
                     routeGainPercent,
                     RouteMuteNormal[offset],
@@ -1316,7 +1350,7 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
         {
             ElkaFx_SetChannelSettings(
                 (int)settings.Mode,
-                settings.Endpoint.Range.Start + offset,
+                settings.Endpoint.Range.ChannelAt(offset),
                 settings.Enabled[offset] ? 1 : 0,
                 (int)Math.Round(settings.DelayMilliseconds[offset]),
                 (int)Math.Round(settings.VolumePercent[offset]));
@@ -1334,7 +1368,7 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
         ElkaFx_SetTargetRange((int)mode, endpoint.Range.Start, endpoint.ChannelCount);
         for (var offset = 0; offset < endpoint.ChannelCount; offset++)
         {
-            ElkaFx_SetChannelSettings((int)mode, endpoint.Range.Start + offset, 0, 0, 100);
+            ElkaFx_SetChannelSettings((int)mode, endpoint.Range.ChannelAt(offset), 0, 0, 100);
         }
 
     }

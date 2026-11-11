@@ -16,11 +16,19 @@ public:
     // owner creation/shutdown by the control API, but reads and close are independent.
     int open(SignalMonitorHub& hub, int stream, bool output, int first, int channels)
     {
+        if (first < 0 || channels < 1 || channels > SignalMonitorHub::Channels) return 0;
+        int map[SignalMonitorHub::Channels] {};
+        for (int c = 0; c < channels; ++c) map[c] = first + c;
+        return openChannels(hub, stream, output, map, channels);
+    }
+
+    int openChannels(SignalMonitorHub& hub, int stream, bool output, const int* channelList, int channels)
+    {
         auto reader = std::make_shared<Reader>(hub);
         std::lock_guard lock(mutex);
         // Do not recycle public handles across host recreation or stale UI readers.
         if (nextHandle == std::numeric_limits<int>::max()) return 0;
-        const int tap = hub.open(stream, output, first, channels);
+        const int tap = hub.openChannels(stream, output, channelList, channels);
         if (tap == 0) return 0;
         reader->tap = tap;
         const int handle = nextHandle++;

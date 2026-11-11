@@ -10,7 +10,8 @@ public partial class MainWindow
     private readonly Dictionary<string, EndpointMonitor> _signalMonitors = [];
     private Func<IoEndpoint, bool, int, Color, SignalMonitorWindow> _createSignalMonitorWindow =
         (endpoint, outputSide, stream, hue) => new SignalMonitorWindow(endpoint.Name,
-            outputSide ? "Destination" : "Source", stream, outputSide, endpoint.Range.Start, endpoint.ChannelCount, hue);
+            outputSide ? "Destination" : "Source", stream, outputSide, endpoint.Range.ChannelAt(0),
+            endpoint.ChannelCount, hue, channelList: endpoint.Range.Channels.ToArray());
 
     private void OpenSignalMonitor(CallbackMode mode, IoEndpoint endpoint, bool outputSide, int? selectedStream = null, bool toggle = false)
     {
@@ -76,7 +77,7 @@ public partial class MainWindow
         var own = EndpointRouteHueKey(endpoint.Key(mode));
         if (!outputSide) return own;
         foreach (var connection in _settings.CanvasConnections.Where(c =>
-                     c.ToMode == mode && c.ToChannel >= endpoint.Range.Start && c.ToChannel <= endpoint.Range.End &&
+                     c.ToMode == mode && endpoint.Range.Contains(c.ToChannel) &&
                      c.Kind is ConnectionEndpointToEndpoint or ConnectionNodeToEndpoint or ConnectionGroupOutputToEndpoint))
         {
             var hue = FindConnectionRouteHue(connection, []);

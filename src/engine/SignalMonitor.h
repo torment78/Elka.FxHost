@@ -32,8 +32,21 @@ public:
     // Open/read/close are serialized by the control API, never called by audio.
     int open(int stream, bool output, int first, int count)
     {
-        if (stream < 0 || stream > 2 || first < 0 || first >= 128 || count < 1 || count > Channels || first + count > 128)
+        if (first < 0 || count < 1 || count > Channels || first + count > 128)
             return 0;
+        std::array<int, Channels> map{};
+        for (int c = 0; c < count; ++c) map[static_cast<size_t>(c)] = first + c;
+        return openChannels(stream, output, map.data(), count);
+    }
+
+    // Any up-to-8 engine channels in any order (a node linked from scattered channels).
+    int openChannels(int stream, bool output, const int* channels, int count)
+    {
+        if (stream < 0 || stream > 2 || channels == nullptr || count < 1 || count > Channels)
+            return 0;
+        for (int c = 0; c < count; ++c)
+            if (channels[c] < 0 || channels[c] >= 128)
+                return 0;
         for (int i = 0; i < Capacity; ++i)
         {
             auto& slot = slots[static_cast<size_t>(i)];
@@ -41,7 +54,8 @@ public:
             auto session = std::make_unique<Session>();
             session->stream = stream;
             session->output = output;
-            session->first = first;
+            session->first = channels[0];
+            std::copy_n(channels, count, session->map.begin());
             session->data.channelCount = count;
             session->id = nextId++;
             if (nextId == 0x7fffffff) nextId = 1;
@@ -132,7 +146,7 @@ public:
                 }
                 for (int c = 0; c < data.channelCount; ++c)
                 {
-                    const int sourceIndex = session->first + c;
+                    const int sourceIndex = session->map[static_cast<size_t>(c)];
                     const float* source = channels && sourceIndex < channelCount ? channels[sourceIndex] : nullptr;
                     float peak = data.peaks[static_cast<size_t>(c)];
                     auto& ring = data.audio[static_cast<size_t>(c)];
@@ -160,6 +174,7 @@ private:
     struct Session
     {
         int id = 0, stream = 0, first = 0, position = 0;
+        std::array<int, Channels> map{};
         bool output = false;
         Snapshot data;
     };

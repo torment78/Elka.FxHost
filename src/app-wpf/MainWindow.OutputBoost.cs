@@ -27,7 +27,7 @@ public partial class MainWindow
             int stream = settings.Mode == CallbackMode.Output ? 1 : 0;
             int milliDb = (int)Math.Round(settings.OutputBoostDb * 1000);
             for (int offset = 0; offset < settings.Endpoint.ChannelCount; offset++)
-                desired[(stream, settings.Endpoint.Range.Start + offset)] = milliDb;
+                desired[(stream, settings.Endpoint.Range.ChannelAt(offset))] = milliDb;
         }
         return desired;
     }

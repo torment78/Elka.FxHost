@@ -37,12 +37,17 @@ internal sealed class SignalMonitorWindow : Window
     internal Exception? ReaderFailure { get; private set; }
 
     internal SignalMonitorWindow(string endpoint, string side, int stream, bool outputSide, int firstChannel, int channelCount, Color hue,
-        Action<SignalMonitorMailbox, CancellationToken>? testReader = null, PeakHoldSession? peakSession = null)
+        Action<SignalMonitorMailbox, CancellationToken>? testReader = null, PeakHoldSession? peakSession = null,
+        IReadOnlyList<int>? channelList = null)
     {
+        // A linked node's channels can be scattered (A1, A3, A5); the monitor shows exactly those.
+        var channels = (channelList ?? Enumerable.Range(firstChannel, channelCount).ToArray()).Take(8).ToArray();
+        channelCount = channels.Length;
+        var contiguous = channels.Select((channel, index) => channel - index).Distinct().Count() == 1;
         // Do not inherit the main dispatcher's implicit Window style/resources.
         Style = new Style(typeof(Window));
         _mailbox = new SignalMonitorMailbox(channelCount);
-        _peakAddress = new EndpointMeterAddress(stream, outputSide, firstChannel, channelCount);
+        _peakAddress = new EndpointMeterAddress(stream, outputSide, channels[0], contiguous ? channelCount : 1);
         _peakSession = peakSession ?? (testReader is null ? PeakHoldSession.Shared : null);
         Title = $"{endpoint} - {side} - Signal Monitor";
         Width = channelCount > 2 ? 760 : 660;
@@ -62,7 +67,7 @@ internal sealed class SignalMonitorWindow : Window
         Content = _outline;
         UpdateHue(hue);
         _mailbox.Updated = RequestDraw;
-        int handle = testReader is null ? NativeSignalMonitor.Open(stream, outputSide ? 1 : 0, firstChannel, channelCount) : 0;
+        int handle = testReader is null ? NativeSignalMonitor.OpenChannels(stream, outputSide ? 1 : 0, channels, channelCount) : 0;
         if (testReader is null && handle == 0) throw new InvalidOperationException("The audio engine is not ready, or too many signal monitors are open.");
         try
         {
@@ -338,6 +343,8 @@ internal static class NativeSignalMonitor
     private const string Dll = "ElkaVoiceMeeterFxHost.Native.dll";
     [DllImport(Dll, EntryPoint = "ElkaFx_OpenSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     internal static extern int Open(int stream, int outputSide, int firstChannel, int channels);
+    [DllImport(Dll, EntryPoint = "ElkaFx_OpenSignalMonitorChannels", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int OpenChannels(int stream, int outputSide, int[] channels, int channelCount);
     [DllImport(Dll, EntryPoint = "ElkaFx_CloseSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void Close(int handle);
     [DllImport(Dll, EntryPoint = "ElkaFx_ReadSignalMonitor", CallingConvention = CallingConvention.Cdecl)]

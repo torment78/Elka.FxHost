@@ -11,7 +11,7 @@ internal sealed class QuickDisconnectSelection
     internal void AddEndpoint(CallbackMode mode, ChannelRange range, bool outputSide)
     {
         var channels = outputSide ? _destinations : _sources;
-        for (var channel = range.Start; channel <= range.End; channel++)
+        foreach (var channel in range.Channels)
             channels.Add((mode, channel));
     }
 

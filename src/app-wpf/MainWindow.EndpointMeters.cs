@@ -109,6 +109,15 @@ public partial class MainWindow
     private void DrawEndpointMeters(IoEndpoint endpoint, CallbackMode mode, bool outputSide,
         int pinCount, double x, double y, Border card, List<FrameworkElement> elements)
     {
+        if (!UsesBlockMeter(endpoint))
+        {
+            // Linked from scattered channels: one meter row per pin, each reading its own channel.
+            for (var offset = 0; offset < pinCount; offset++)
+                DrawEndpointMeterRow(endpoint, mode, outputSide, endpoint.Range.ChannelAt(offset), offset, x, y, card, elements,
+                    withPeakIndicator: offset == 0);
+            return;
+        }
+
         var view = new EndpointMeterView(pinCount, SignalMonitorHue(mode, endpoint, outputSide))
         {
             Width = VstEndpointCardWidth - 48
@@ -136,6 +145,45 @@ public partial class MainWindow
         Canvas.SetTop(indicator, y + 7);
         RoutingCanvas.Children.Add(indicator);
         elements.Add(indicator);
+        _endpointMeters.Add((address, view, peak, indicator));
+    }
+
+    // The native peak reader handles up to 8 neighbouring channels per block.
+    private static bool UsesBlockMeter(IoEndpoint endpoint) => endpoint.Range.IsContiguous && endpoint.ChannelCount <= 8;
+
+    private void DrawEndpointMeterRow(IoEndpoint endpoint, CallbackMode mode, bool outputSide, int channel, int row,
+        double x, double y, Border card, List<FrameworkElement> elements, bool withPeakIndicator)
+    {
+        var view = new EndpointMeterView(1, SignalMonitorHue(mode, endpoint, outputSide))
+        {
+            Width = VstEndpointCardWidth - 48
+        };
+        Canvas.SetLeft(view, x + (outputSide ? 44 : 8));
+        Canvas.SetTop(view, VstCardPinY(y, row) - EndpointMeterView.RowHeight / 2);
+        if (_settings.NodeVuMetersEnabled)
+        {
+            RoutingCanvas.Children.Add(view);
+            elements.Add(view);
+        }
+        int stream = _vstCanvasMode == CallbackMode.Main || IsInputDirectOutputVstView()
+            ? 2 : mode == CallbackMode.Output ? 1 : 0;
+        var address = new EndpointMeterAddress(stream, outputSide, channel, 1);
+        var key = (_kind, address);
+        if (!_endpointPeakStates.TryGetValue(key, out var peak))
+            _endpointPeakStates[key] = peak = new EndpointPeakState();
+        var indicator = new EndpointPeakIndicator(peak, card.Background, card.BorderBrush,
+            $"{endpoint.Name} / {(outputSide ? "returned output" : "incoming input")}", () =>
+            {
+                _peakHoldSession.Reset(address);
+                RefreshEndpointPeakIndicators();
+            });
+        if (withPeakIndicator)
+        {
+            Canvas.SetLeft(indicator, x + (outputSide ? 5 : VstEndpointCardWidth - EndpointPeakIndicator.Diameter - 5));
+            Canvas.SetTop(indicator, y + 7);
+            RoutingCanvas.Children.Add(indicator);
+            elements.Add(indicator);
+        }
         _endpointMeters.Add((address, view, peak, indicator));
     }
 

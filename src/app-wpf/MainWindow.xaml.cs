@@ -3905,7 +3905,7 @@ private void RefreshEndpointButtonSelection()
         var label = settings.Endpoint.ChannelCount == 2
             ? offset == 0 ? "L" : "R"
             : $"Ch {offset + 1}";
-        var absoluteChannel = settings.Endpoint.Range.Start + offset + 1;
+        var absoluteChannel = settings.Endpoint.Range.ChannelAt(offset) + 1;
         var sendBusIndex = SelectedCrossRouteBusIndex(settings);
         IReadOnlyList<IoEndpoint> buses = sendBusIndex >= 0
             ? VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind)
@@ -4888,7 +4888,7 @@ private void RefreshEndpointButtonSelection()
             {
                 IsSource = true,
                 SourceOffset = offset,
-                SourceChannel = settings.Endpoint.Range.Start + offset,
+                SourceChannel = settings.Endpoint.Range.ChannelAt(offset),
                 Point = point,
                 Label = $"{settings.Endpoint.Name} {CrossRoutePinLabel(offset)}"
             };
@@ -4958,7 +4958,7 @@ private void RefreshEndpointButtonSelection()
                 IsSource = false,
                 BusIndex = busIndex,
                 DestinationOffset = offset,
-                DestinationChannel = bus.Range.Start + offset,
+                DestinationChannel = bus.Range.ChannelAt(offset),
                 Point = point,
                 Label = $"{bus.Name} {CrossRoutePinLabel(offset)}"
             };
@@ -5066,8 +5066,8 @@ private void RefreshEndpointButtonSelection()
                             $"{buses[destination.BusIndex].Name} {CrossRoutePinLabel(destination.ChannelOffset)}";
                 var info = new CrossRouteConnectionInfo(offset, destination.BusIndex, destination.ChannelOffset, label);
                 var key = CrossRouteConnectionKey(info);
-                var sourceChannel = settings.Endpoint.Range.Start + offset;
-                var destinationChannel = buses[destination.BusIndex].Range.Start + destination.ChannelOffset;
+                var sourceChannel = settings.Endpoint.Range.ChannelAt(offset);
+                var destinationChannel = buses[destination.BusIndex].Range.ChannelAt(destination.ChannelOffset);
                 var hasVstGraph = HasVstGraphRoute(sourceChannel, destinationChannel);
                 var path = CreateWirePath(start, end, preview: false, selected: key == _selectedCrossRouteConnectionKey);
                 path.Tag = info;
@@ -5343,8 +5343,7 @@ private void RefreshEndpointButtonSelection()
         var buses = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         for (var index = 0; index < buses.Count; index++)
         {
-            if (buses[index].Range.Start == destinationEndpoint.Range.Start &&
-                buses[index].Range.End == destinationEndpoint.Range.End)
+            if (buses[index].Range == destinationEndpoint.Range)
             {
                 busIndex = index;
                 break;
@@ -5356,8 +5355,8 @@ private void RefreshEndpointButtonSelection()
             return false;
         }
 
-        sourceOffset = sourceChannel - sourceEndpoint.Range.Start;
-        destinationOffset = destinationChannel - destinationEndpoint.Range.Start;
+        sourceOffset = sourceEndpoint.Range.OffsetOf(sourceChannel);
+        destinationOffset = destinationEndpoint.Range.OffsetOf(destinationChannel);
         if (sourceOffset < 0 ||
             sourceOffset >= sourceEndpoint.ChannelCount ||
             destinationOffset < 0 ||
@@ -5493,7 +5492,7 @@ private void RefreshEndpointButtonSelection()
 
         grid.Children.Add(new TextBlock
         {
-            Text = $"{label} ({settings.Endpoint.Range.Start + offset + 1})",
+            Text = $"{label} ({settings.Endpoint.Range.ChannelAt(offset) + 1})",
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         });
@@ -7489,9 +7488,9 @@ private void RefreshEndpointButtonSelection()
         var required = Math.Min(2, endpoint.ChannelCount);
         void IncludeChannel(int channel)
         {
-            if (channel >= endpoint.Range.Start && channel <= endpoint.Range.End)
+            if (endpoint.Range.Contains(channel))
             {
-                required = Math.Max(required, channel - endpoint.Range.Start + 1);
+                required = Math.Max(required, endpoint.Range.OffsetOf(channel) + 1);
             }
         }
 
@@ -7646,7 +7645,7 @@ private void RefreshEndpointButtonSelection()
         {
             var pinY = VstCardPinY(y, offset);
             var pinX = outputSide ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstEndpointCardWidth);
-            var channel = endpoint.Range.Start + offset;
+            var channel = endpoint.Range.ChannelAt(offset);
             var pinInfo = new CanvasPinInfo
             {
                 Kind = outputSide ? PinEndpointDestination : PinEndpointSource,
@@ -7654,7 +7653,7 @@ private void RefreshEndpointButtonSelection()
                 Channel = channel,
                 Pin = offset,
                 Point = new Point(pinX, pinY),
-                Label = FxHostEdition.ChannelName(endpoint.Range.Start + offset, outputSide)
+                Label = FxHostEdition.ChannelName(endpoint.Range.ChannelAt(offset), outputSide)
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
 
@@ -7677,7 +7676,7 @@ private void RefreshEndpointButtonSelection()
 
             var label = new TextBlock
             {
-                Text = FxHostEdition.ChannelShortName(endpoint.Range.Start + offset),
+                Text = FxHostEdition.ChannelShortName(endpoint.Range.ChannelAt(offset)),
                 FontSize = 11,
                 Foreground = hueStroke ?? (Brush)FindResource("MutedTextBrush"),
                 ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide))
@@ -7702,7 +7701,7 @@ private void RefreshEndpointButtonSelection()
 
         foreach (var offset in HiddenConnectedEndpointOffsets(mode, endpoint, outputSide, visiblePinCount))
         {
-            var channel = endpoint.Range.Start + offset;
+            var channel = endpoint.Range.ChannelAt(offset);
             var anchorOffset = Math.Min(offset % CollapsedVisiblePinCount, visiblePinCount - 1);
             var point = new Point(
                 outputSide ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstEndpointCardWidth),
@@ -7714,7 +7713,7 @@ private void RefreshEndpointButtonSelection()
                 Channel = channel,
                 Pin = offset,
                 Point = point,
-                Label = FxHostEdition.ChannelName(endpoint.Range.Start + offset, outputSide)
+                Label = FxHostEdition.ChannelName(endpoint.Range.ChannelAt(offset), outputSide)
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
         }
@@ -7759,12 +7758,12 @@ private void RefreshEndpointButtonSelection()
         var hidden = new SortedSet<int>();
         void IncludeChannel(int channel)
         {
-            if (channel < endpoint.Range.Start || channel > endpoint.Range.End)
+            if (!endpoint.Range.Contains(channel))
             {
                 return;
             }
 
-            var offset = channel - endpoint.Range.Start;
+            var offset = endpoint.Range.OffsetOf(channel);
             if (offset >= visiblePinCount)
             {
                 hidden.Add(offset);
@@ -10889,7 +10888,7 @@ private void RefreshEndpointButtonSelection()
         var buses = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         foreach (var route in AllVstGraphChannelRoutes())
         {
-            if (route.SourceChannel < endpoint.Range.Start || route.SourceChannel > endpoint.Range.End)
+            if (!endpoint.Range.Contains(route.SourceChannel))
             {
                 continue;
             }
@@ -10897,15 +10896,15 @@ private void RefreshEndpointButtonSelection()
             for (var busIndex = 0; busIndex < buses.Count; busIndex++)
             {
                 var bus = buses[busIndex];
-                if (route.DestinationChannel < bus.Range.Start || route.DestinationChannel > bus.Range.End)
+                if (!bus.Range.Contains(route.DestinationChannel))
                 {
                     continue;
                 }
 
                 yield return (
-                    route.SourceChannel - endpoint.Range.Start,
+                    endpoint.Range.OffsetOf(route.SourceChannel),
                     busIndex,
-                    route.DestinationChannel - bus.Range.Start);
+                    bus.Range.OffsetOf(route.DestinationChannel));
                 break;
             }
         }
@@ -10915,7 +10914,7 @@ private void RefreshEndpointButtonSelection()
     {
         return VoicemeeterIoLayout
             .GetEndpoints(mode, _kind)
-            .FirstOrDefault(endpoint => channel >= endpoint.Range.Start && channel <= endpoint.Range.End);
+            .FirstOrDefault(endpoint => endpoint.Range.Contains(channel));
     }
 
     private IoEndpoint? EndpointForKey(string? key)
@@ -12244,8 +12243,8 @@ private void RefreshEndpointButtonSelection()
                 var pinCount = Math.Min(source.Endpoint.ChannelCount, destination.Endpoint.ChannelCount);
                 for (var pin = 0; pin < pinCount; pin++)
                 {
-                    var sourceChannel = source.Endpoint.Range.Start + pin;
-                    var destinationChannel = destination.Endpoint.Range.Start + pin;
+                    var sourceChannel = source.Endpoint.Range.ChannelAt(pin);
+                    var destinationChannel = destination.Endpoint.Range.ChannelAt(pin);
                     if (FindEndpointToEndpointConnection(source.Mode, destination.Mode, sourceChannel, destinationChannel) is not null)
                     {
                         continue;
@@ -12380,7 +12379,7 @@ private void RefreshEndpointButtonSelection()
             var pinCount = Math.Min(source.Endpoint.ChannelCount, node.MainInputPins);
             for (var pin = 0; pin < pinCount; pin++)
             {
-                var channel = source.Endpoint.Range.Start + pin;
+                var channel = source.Endpoint.Range.ChannelAt(pin);
                 var visualPin = node.SidechainInputPins + pin;
                 if (NativeInputPinForVisualPin(node, visualPin) < 0)
                 {
@@ -12420,7 +12419,7 @@ private void RefreshEndpointButtonSelection()
             var pinCount = Math.Min(destination.Endpoint.ChannelCount, node.OutputPins);
             for (var pin = 0; pin < pinCount; pin++)
             {
-                var channel = destination.Endpoint.Range.Start + pin;
+                var channel = destination.Endpoint.Range.ChannelAt(pin);
                 if (FindNodeToEndpointConnection(node.Slot, pin, destination.Mode, channel) is null)
                 {
                     _settings.CanvasConnections.Add(new CanvasConnectionSnapshot
@@ -12538,8 +12537,8 @@ private void RefreshEndpointButtonSelection()
     {
         var y = Math.Max(80, _lastCanvasClick.Y + 28);
         var x = VstCanvasWallMargin + VstEndpointCardWidth + 72 + (existingNodeCount * (VstNodeWidth + 34));
-        if (_pinPositions.TryGetValue(EndpointSourceKey(source.Mode, source.Endpoint.Range.Start), out var sourcePoint) &&
-            _pinPositions.TryGetValue(EndpointDestinationKey(destination.Mode, destination.Endpoint.Range.Start), out var destinationPoint))
+        if (_pinPositions.TryGetValue(EndpointSourceKey(source.Mode, source.Endpoint.Range.ChannelAt(0)), out var sourcePoint) &&
+            _pinPositions.TryGetValue(EndpointDestinationKey(destination.Mode, destination.Endpoint.Range.ChannelAt(0)), out var destinationPoint))
         {
             x = Math.Max(300, Math.Min(sourcePoint.X, destinationPoint.X) + 86 + (existingNodeCount * (VstNodeWidth + 34)));
             y = Math.Max(80, Math.Min(sourcePoint.Y, destinationPoint.Y));
@@ -12606,7 +12605,7 @@ private void RefreshEndpointButtonSelection()
         var pinCount = Math.Min(group.InputPins, source.Endpoint.ChannelCount);
         for (var pin = 0; pin < pinCount; pin++)
         {
-            var channel = source.Endpoint.Range.Start + pin;
+            var channel = source.Endpoint.Range.ChannelAt(pin);
             var connection = new CanvasConnectionSnapshot
             {
                 Kind = ConnectionEndpointToGroupInput,
@@ -12640,7 +12639,7 @@ private void RefreshEndpointButtonSelection()
         var pinCount = Math.Min(group.OutputPins, destination.Endpoint.ChannelCount);
         for (var pin = 0; pin < pinCount; pin++)
         {
-            var channel = destination.Endpoint.Range.Start + pin;
+            var channel = destination.Endpoint.Range.ChannelAt(pin);
             var connection = new CanvasConnectionSnapshot
             {
                 Kind = ConnectionGroupOutputToEndpoint,

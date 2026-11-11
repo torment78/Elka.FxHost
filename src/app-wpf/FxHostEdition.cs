@@ -65,33 +65,46 @@ internal static class FxHostEdition
         (outputSide ? "FX Out " : "FX In ") + ChannelShortName(channel);
 
     // ---- Mono nodes and linked groups ---------------------------------------------
-    // Every ASIO channel is its own mono node. Adjacent channels can be linked into one
-    // node (stereo A1-A2, or A1-A6 ...). The FX In and FX Out sides are linked
-    // separately. Cables always attach per channel, so linking never changes routing.
+    // Every ASIO channel is its own mono node. Any channels can be linked into one node,
+    // in the order they were Ctrl-clicked (A1+A2 stereo, A1-A6, or A1+A3+A5). The node
+    // sits where its lowest channel was. FX In and FX Out link separately. Cables attach
+    // per channel, so linking never changes routing.
 
-    private static readonly List<(int Start, int End)>[] Links = [[], []];
+    private static readonly List<int[]>[] Links = [[], []];
     private static readonly IReadOnlyList<IoEndpoint>?[] SideCache = [null, null];
 
     private static int SideIndex(bool outputSide) => outputSide ? 1 : 0;
 
-    public static string LinkedEndpointName(int start, int end) =>
-        start == end ? $"FX {ChannelShortName(start)}" : $"FX {ChannelShortName(start)}-{ChannelShortName(end)}";
+    public static string LinkedEndpointName(IReadOnlyList<int> channels)
+    {
+        if (channels.Count == 1)
+            return $"FX {ChannelShortName(channels[0])}";
+        var contiguous = channels.Select((channel, index) => channel - index).Distinct().Count() == 1;
+        return contiguous
+            ? $"FX {ChannelShortName(channels[0])}-{ChannelShortName(channels[^1])}"
+            : "FX " + string.Join("+", channels.Select(ChannelShortName));
+    }
 
-    /// <summary>The nodes on one side: mono channels, with linked ranges merged.</summary>
+    /// <summary>The nodes on one side: mono channels, with linked groups merged.</summary>
     public static IReadOnlyList<IoEndpoint> SideEndpoints(bool outputSide)
     {
         var index = SideIndex(outputSide);
         if (SideCache[index] is { } cached) return cached;
 
-        var endpoints = new List<IoEndpoint>();
         var links = Links[index];
-        var channel = 0;
-        while (channel < ChannelCount)
+        var linkedChannels = links.SelectMany(static link => link).ToHashSet();
+        var endpoints = new List<IoEndpoint>();
+        for (var channel = 0; channel < ChannelCount; channel++)
         {
-            var link = links.FirstOrDefault(range => range.Start == channel);
-            var end = link.End > link.Start ? Math.Min(link.End, ChannelCount - 1) : channel;
-            endpoints.Add(new IoEndpoint(LinkedEndpointName(channel, end), new ChannelRange(channel, end)));
-            channel = end + 1;
+            if (!linkedChannels.Contains(channel))
+            {
+                endpoints.Add(new IoEndpoint(LinkedEndpointName([channel]), new ChannelRange(channel, channel)));
+                continue;
+            }
+
+            var link = links.FirstOrDefault(candidate => candidate.Min() == channel);
+            if (link is not null)
+                endpoints.Add(new IoEndpoint(LinkedEndpointName(link), ChannelRange.FromChannels(link)));
         }
 
         SideCache[index] = endpoints;
@@ -102,6 +115,7 @@ internal static class FxHostEdition
     public static IEnumerable<IoEndpoint> AllEndpoints() =>
         SideEndpoints(false).Concat(SideEndpoints(true)).DistinctBy(static endpoint => (endpoint.Name, endpoint.Range));
 
+    /// <summary>Saved as "0,2,4" (click order); older "start-end" entries still load.</summary>
     public static void LoadLinks(IEnumerable<string>? inLinks, IEnumerable<string>? outLinks)
     {
         Links[0].Clear();
@@ -110,59 +124,57 @@ internal static class FxHostEdition
         {
             foreach (var value in values ?? [])
             {
-                var parts = value.Split('-');
-                if (parts.Length == 2 && int.TryParse(parts[0], out var start) && int.TryParse(parts[1], out var end) &&
-                    start >= 0 && end > start && end < ChannelCount &&
-                    !Links[side].Any(range => start <= range.End && end >= range.Start))
-                {
-                    Links[side].Add((start, end));
-                }
+                var channels = ParseLink(value);
+                if (channels is null || channels.Length < 2 || channels.Any(channel => channel < 0 || channel >= ChannelCount) ||
+                    channels.Distinct().Count() != channels.Length ||
+                    Links[side].Any(existing => existing.Intersect(channels).Any()))
+                    continue;
+                Links[side].Add(channels);
             }
         }
 
         SideCache[0] = SideCache[1] = null;
     }
 
-    public static List<string> SaveLinks(bool outputSide) =>
-        Links[SideIndex(outputSide)].OrderBy(static range => range.Start).Select(static range => $"{range.Start}-{range.End}").ToList();
+    private static int[]? ParseLink(string value)
+    {
+        var parts = value.Split('-');
+        if (parts.Length == 2 && int.TryParse(parts[0], out var start) && int.TryParse(parts[1], out var end) && end > start)
+            return Enumerable.Range(start, end - start + 1).ToArray();
+        var list = value.Split(',');
+        var channels = new int[list.Length];
+        for (var index = 0; index < list.Length; index++)
+            if (!int.TryParse(list[index], out channels[index])) return null;
+        return channels;
+    }
 
-    /// <summary>Links the selected nodes on one side into one node. They must be adjacent.</summary>
+    public static List<string> SaveLinks(bool outputSide) =>
+        Links[SideIndex(outputSide)].OrderBy(static link => link.Min()).Select(static link => string.Join(",", link)).ToList();
+
+    /// <summary>Links the selected nodes on one side into one node, in selection order.</summary>
     public static bool TryLink(bool outputSide, IEnumerable<IoEndpoint> selected, out string message)
     {
-        var channels = selected.SelectMany(static endpoint => Enumerable.Range(endpoint.Range.Start, endpoint.ChannelCount))
-            .Distinct().OrderBy(static channel => channel).ToList();
+        var channels = selected.SelectMany(static endpoint => endpoint.Range.Channels).Distinct().ToArray();
         var side = outputSide ? "FX Out" : "FX In";
-        if (channels.Count < 2)
+        if (channels.Length < 2)
         {
             message = $"Select at least two {side} nodes to link.";
             return false;
         }
 
-        var start = channels[0];
-        var end = channels[^1];
-        if (end - start + 1 != channels.Count)
-        {
-            message = $"{side} nodes must be next to each other to link ({ChannelShortName(start)} to {ChannelShortName(end)} has gaps).";
-            return false;
-        }
-
+        // Selecting a linked node selects all of its channels, so it is absorbed whole.
         var links = Links[SideIndex(outputSide)];
-        links.RemoveAll(range => range.Start >= start && range.End <= end);
-        if (links.Any(range => start <= range.End && end >= range.Start))
-        {
-            message = $"{side} {ChannelShortName(start)}-{ChannelShortName(end)} overlaps another linked node. Unlink it first.";
-            return false;
-        }
-
-        links.Add((start, end));
+        links.RemoveAll(link => link.Intersect(channels).Any());
+        links.Add(channels);
         SideCache[SideIndex(outputSide)] = null;
-        message = $"Linked {side} {ChannelShortName(start)}-{ChannelShortName(end)} ({channels.Count} channels).";
+        message = $"Linked {side} {LinkedEndpointName(channels)[3..]} ({channels.Length} channels).";
         return true;
     }
 
     public static bool Unlink(bool outputSide, IoEndpoint endpoint)
     {
-        var removed = Links[SideIndex(outputSide)].RemoveAll(range => range.Start == endpoint.Range.Start && range.End == endpoint.Range.End) > 0;
+        var channels = endpoint.Range.Channels.ToHashSet();
+        var removed = Links[SideIndex(outputSide)].RemoveAll(link => channels.SetEquals(link)) > 0;
         if (removed) SideCache[SideIndex(outputSide)] = null;
         return removed;
     }

@@ -1224,6 +1224,18 @@ __declspec(dllexport) int __cdecl ElkaFx_OpenSignalMonitor(int stream, int outpu
     catch (...) { return 0; }
 }
 
+__declspec(dllexport) int __cdecl ElkaFx_OpenSignalMonitorChannels(int stream, int outputSide, const int* channels, int channelCount)
+{
+    try
+    {
+        std::lock_guard lock(g_mutex);
+        if (!g_host) return 0;
+        return g_signalMonitorReaders.openChannels(g_host->engine.signalMonitors,
+            stream, outputSide != 0, channels, channelCount);
+    }
+    catch (...) { return 0; }
+}
+
 __declspec(dllexport) void __cdecl ElkaFx_CloseSignalMonitor(int id)
 {
     g_signalMonitorReaders.close(id);

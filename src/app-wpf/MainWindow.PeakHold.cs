@@ -23,10 +23,11 @@ public partial class MainWindow
             if (stream == 2 && !_advancedModeActive) continue;
             foreach (bool output in new[] { false, true })
             {
-                var mode = stream == 1 || (stream == 2 && output) ? CallbackMode.Output : CallbackMode.Input;
-                foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(mode, _kind))
+                var addresses = FxHostEdition.SideEndpoints(output).SelectMany(endpoint => UsesBlockMeter(endpoint)
+                    ? [new EndpointMeterAddress(stream, output, endpoint.Range.Start, endpoint.ChannelCount)]
+                    : endpoint.Range.Channels.Select(channel => new EndpointMeterAddress(stream, output, channel, 1)));
+                foreach (var address in addresses)
                 {
-                    var address = new EndpointMeterAddress(stream, output, endpoint.Range.Start, endpoint.ChannelCount);
                     var key = (_kind, address);
                     wanted.Add(key);
                     if (_endpointPeakSubscriptions.ContainsKey(key)) continue;
