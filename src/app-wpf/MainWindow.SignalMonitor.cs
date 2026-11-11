@@ -123,8 +123,7 @@ public partial class MainWindow
             case ConnectionEndpointToNode:
             case ConnectionEndpointToEndpoint:
             case ConnectionEndpointToGroupInput:
-                return IsInputPatchBypassChannel(connection.FromMode, connection.FromChannel, out _)
-                    ? null : EndpointRouteHueKey(connection.FromMode, connection.FromChannel);
+                return EndpointRouteHueKey(connection.FromMode, connection.FromChannel);
             case ConnectionNodeToNode:
             case ConnectionNodeToEndpoint:
             case ConnectionNodeToGroupInput:

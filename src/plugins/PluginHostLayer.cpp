@@ -99,7 +99,7 @@ juce::File pluginCacheFile()
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile("ElkaSoft")
-        .getChildFile("VoiceMeeterFxHost")
+        .getChildFile("FxHost")
         .getChildFile("plugin-cache.xml");
 }
 
@@ -107,7 +107,7 @@ juce::File legacyPluginCacheFile()
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile("Elka")
-        .getChildFile("VoiceMeeterFxHost")
+        .getChildFile("FxHost")
         .getChildFile("plugin-cache.xml");
 }
 
@@ -115,7 +115,7 @@ juce::File legacyVst3PluginCacheFile()
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile("Elka")
-        .getChildFile("VoiceMeeterFxHost")
+        .getChildFile("FxHost")
         .getChildFile("vst3-cache.xml");
 }
 

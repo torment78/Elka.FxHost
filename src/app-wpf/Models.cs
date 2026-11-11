@@ -72,95 +72,30 @@ internal enum EndpointPinMode
 
 internal static class VoicemeeterIoLayout
 {
+    // Elka FX Host: both canvas sides are the driver's banks of 8 (FX In A..P on the left,
+    // FX Out A..P on the right). The bank count follows the configured ASIO channel count.
+    private static readonly IReadOnlyList<IoEndpoint> AsioBanks = Enumerable
+        .Range(0, FxHostEdition.BankCount)
+        .Select(static bank => new IoEndpoint(
+            FxHostEdition.BankEndpointName(bank),
+            new ChannelRange(bank * FxHostEdition.ChannelsPerBank, bank * FxHostEdition.ChannelsPerBank + FxHostEdition.ChannelsPerBank - 1)))
+        .ToArray();
+
     public static IReadOnlyList<IoEndpoint> GetEndpoints(CallbackMode mode, VoicemeeterKind kind)
     {
-        return mode == CallbackMode.Output
-            ? BuildOutputEndpoints(kind)
-            : BuildInputEndpoints(kind);
+        return AsioBanks;
     }
 
-    public static IReadOnlyList<IoEndpoint> BuildCanvasInputs(VoicemeeterKind kind) => BuildInputEndpoints(kind);
+    public static IReadOnlyList<IoEndpoint> BuildCanvasInputs(VoicemeeterKind kind) => AsioBanks;
 
-    public static IReadOnlyList<IoEndpoint> BuildCanvasOutputs(VoicemeeterKind kind) => BuildOutputEndpoints(kind);
+    public static IReadOnlyList<IoEndpoint> BuildCanvasOutputs(VoicemeeterKind kind) => AsioBanks;
 
-    public static int InputChannelCount(VoicemeeterKind kind)
-    {
-        return BuildInputEndpoints(kind).Sum(static endpoint => endpoint.ChannelCount);
-    }
+    public static int InputChannelCount(VoicemeeterKind kind) => FxHostEdition.ChannelCount;
 
-    public static int OutputChannelCount(VoicemeeterKind kind)
-    {
-        return BuildOutputEndpoints(kind).Sum(static endpoint => endpoint.ChannelCount);
-    }
+    public static int OutputChannelCount(VoicemeeterKind kind) => FxHostEdition.ChannelCount;
 
-    public static bool IsChannelAvailable(CallbackMode mode, VoicemeeterKind kind, int channel)
-    {
-        return channel >= 0 && channel < (mode == CallbackMode.Output ? OutputChannelCount(kind) : InputChannelCount(kind));
-    }
-
-    private static IReadOnlyList<IoEndpoint> BuildInputEndpoints(VoicemeeterKind kind)
-    {
-        var spec = GetSpec(kind);
-        var endpoints = new List<IoEndpoint>();
-        var channel = 0;
-
-        for (var hardware = 1; hardware <= spec.HardwareInputs; hardware++)
-        {
-            endpoints.Add(new IoEndpoint($"Hardware In {hardware}", new ChannelRange(channel, channel + 1)));
-            channel += 2;
-        }
-
-        foreach (var virtualInput in spec.VirtualInputs)
-        {
-            endpoints.Add(new IoEndpoint(virtualInput, new ChannelRange(channel, channel + 7)));
-            channel += 8;
-        }
-
-        return endpoints;
-    }
-
-    private static IReadOnlyList<IoEndpoint> BuildOutputEndpoints(VoicemeeterKind kind)
-    {
-        var spec = GetSpec(kind);
-        var endpoints = new List<IoEndpoint>();
-        var channel = 0;
-
-        for (var hardware = 1; hardware <= spec.HardwareOutputs; hardware++)
-        {
-            endpoints.Add(new IoEndpoint($"A{hardware} 8ch", new ChannelRange(channel, channel + 7)));
-            channel += 8;
-        }
-
-        for (var virtualBus = 1; virtualBus <= spec.VirtualOutputs; virtualBus++)
-        {
-            var name = virtualBus switch
-            {
-                2 => "B2 / AUX Out",
-                3 => "B3 / VAIO3 Out",
-                _ => $"B{virtualBus} 8ch"
-            };
-            endpoints.Add(new IoEndpoint(name, new ChannelRange(channel, channel + 7)));
-            channel += 8;
-        }
-
-        return endpoints;
-    }
-
-    private static VoicemeeterLayoutSpec GetSpec(VoicemeeterKind kind)
-    {
-        return kind switch
-        {
-            VoicemeeterKind.Standard => new VoicemeeterLayoutSpec(2, ["VAIO"], 2, 1),
-            VoicemeeterKind.Banana => new VoicemeeterLayoutSpec(3, ["VAIO", "AUX"], 3, 2),
-            _ => new VoicemeeterLayoutSpec(5, ["VAIO", "AUX", "VAIO3"], 5, 3)
-        };
-    }
-
-    private sealed record VoicemeeterLayoutSpec(
-        int HardwareInputs,
-        IReadOnlyList<string> VirtualInputs,
-        int HardwareOutputs,
-        int VirtualOutputs);
+    public static bool IsChannelAvailable(CallbackMode mode, VoicemeeterKind kind, int channel) =>
+        channel >= 0 && channel < FxHostEdition.ChannelCount;
 }
 
 internal sealed class ChannelSettingsSnapshot
@@ -875,19 +810,9 @@ internal interface IPluginSavedData
     bool SetPluginNodeControl(int slot, string controlName, string valueText, out string status);
 }
 
-internal interface IInsertAsioPatchClient
-{
-    bool IsInsertAsioRunning { get; }
-    bool IsInsertAsioOpen { get; }
-    bool RefreshVoicemeeterParameters();
-    int GetPatchInsertEnabled(int channel);
-    bool SetPatchInsertEnabled(int channel, bool enabled);
-    void SetInputCallbackSuppressedChannel(int channel, bool suppressed);
-}
+internal sealed record AsioDriverInfo(string Name, int Inputs, int Outputs);
 
-internal sealed record InsertAsioDriverInfo(string Name, int Inputs, int Outputs);
-
-internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInsertAsioPatchClient
+internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
 {
     internal static Func<PluginChoice, IDisposable?>? BeginSandboxLoad { get; set; }
     private const string DllName = "ElkaVoiceMeeterFxHost.Native.dll";
@@ -895,11 +820,8 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
     private bool _attached;
     private bool _disposed;
     private string _lastStatus = "Native engine bridge not loaded";
-    private CallbackMode _requestedMode = CallbackMode.None;
-    private CallbackMode _appliedMode = CallbackMode.None;
     private string _lastDirectRouteSignature = string.Empty;
     private string _lastPluginPassthroughRouteSignature = string.Empty;
-    private readonly Dictionary<int, bool> _inputCallbackSuppressionCache = [];
     private readonly Dictionary<(int Stream, int Channel), int> _outputBoostCache = [];
     private TimeSpan _lastProcessCpuTime;
     private long _lastProcessCpuTimestamp;
@@ -943,22 +865,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
 
     public string LastStatus => _lastStatus;
 
-    public VoicemeeterKind GetRunningVoicemeeterKind()
-    {
-        if (!_attached)
-        {
-            return VoicemeeterKind.Unknown;
-        }
-
-        return ElkaFx_GetVoicemeeterType() switch
-        {
-            1 => VoicemeeterKind.Standard,
-            2 => VoicemeeterKind.Banana,
-            3 => VoicemeeterKind.Potato,
-            _ => VoicemeeterKind.Unknown
-        };
-    }
-
     public bool HasAudioClock => _attached && GetStats().SampleRate > 0;
 
     public HostStatusSnapshot ReadHostStatus(double? enginePeakMicroseconds)
@@ -968,7 +874,7 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
             return new(false, 0, 0, resources.CpuPercent, resources.PrivateWorkingSetBytes, null, _lastStatus);
 
         var stats = GetStats();
-        var running = stats.ConnectionState == NativeConnectionRunning || IsInsertAsioRunning;
+        var running = stats.ConnectionState == NativeConnectionRunning;
         // Use the resettable DSP peak supplied by the display, not the legacy lifetime counter.
         return new(running, stats.SampleRate, stats.BlockSize, resources.CpuPercent,
             resources.PrivateWorkingSetBytes, enginePeakMicroseconds, _lastStatus);
@@ -986,10 +892,9 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
             var stats = GetStats();
             var state = stats.ConnectionState switch
             {
-                3 => "Running",
-                2 => "Callback registered",
-                1 => "Connected",
-                _ => "Disconnected"
+                3 => "ASIO streaming",
+                1 => "Waiting for Matrix",
+                _ => "ASIO link stopped"
             };
 
             var rate = stats.SampleRate > 0 ? $"{stats.SampleRate} Hz" : "no audio yet";
@@ -1295,37 +1200,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
         return format.Trim();
     }
 
-    public void SetRequestedMode(CallbackMode mode)
-    {
-        _requestedMode = mode & AllowedCallbackModes;
-        SetMode(_requestedMode);
-    }
-
-    public CallbackMode RequestedMode => _requestedMode;
-
-    public string ForceDisconnectRealtimeCallback()
-    {
-        if (!_attached)
-        {
-            return _lastStatus;
-        }
-
-        _requestedMode = CallbackMode.None;
-        SetMode(CallbackMode.None, force: true);
-        return _lastStatus;
-    }
-
-    public string RearmRequestedMode()
-    {
-        if (!_attached)
-        {
-            return _lastStatus;
-        }
-
-        SetMode(_requestedMode, force: true);
-        return _lastStatus;
-    }
-
     public void SetProbeChannels(int inputChannel, int outputChannel)
     {
         if (!_attached)
@@ -1350,290 +1224,67 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
         }
     }
 
-    public bool RefreshVoicemeeterParameters()
-    {
-        if (!_attached)
-        {
-            return false;
-        }
+    // ---- Elka FX Host virtual ASIO driver link -----------------------------------
 
-        try
-        {
-            return ElkaFx_RefreshVoicemeeterParameters() == 0;
-        }
-        catch (SEHException ex)
-        {
-            _lastStatus = $"VoiceMeeter parameter refresh failed: {ex.Message}";
-            return false;
-        }
-    }
-
-    public bool IsVoicemeeterRemoteReady()
-    {
-        if (!_attached)
-        {
-            return false;
-        }
-
-        try
-        {
-            return ElkaFx_IsVoicemeeterRemoteReady() == 1;
-        }
-        catch (SEHException)
-        {
-            return false;
-        }
-    }
-
-    public int SetVoicemeeterCustomButton(
-        int buttonIndex,
-        int buttonType,
-        int buttonState,
-        string label,
-        IntPtr commandWindow,
-        int commandId,
-        out string statusText)
-    {
-        statusText = string.Empty;
-        if (!_attached)
-        {
-            statusText = _lastStatus;
-            return -2;
-        }
-
-        var status = new StringBuilder(512);
-        try
-        {
-            var result = ElkaFx_SetVoicemeeterCustomButton(
-                buttonIndex,
-                buttonType,
-                buttonState,
-                label,
-                commandWindow,
-                commandId,
-                status,
-                status.Capacity);
-            statusText = status.ToString();
-            if (status.Length > 0)
-            {
-                _lastStatus = statusText;
-            }
-            return result;
-        }
-        catch (EntryPointNotFoundException)
-        {
-            statusText = "Native bridge does not expose VoiceMeeter custom-button support.";
-            return -1;
-        }
-        catch (SEHException ex)
-        {
-            statusText = $"VoiceMeeter custom button failed: {ex.Message}";
-            return -1;
-        }
-    }
-
-    public int EnsureRealtimePrepared(out string statusText)
-    {
-        statusText = string.Empty;
-        if (!_attached)
-        {
-            statusText = _lastStatus;
-            return -1;
-        }
-
-        try
-        {
-            var status = new StringBuilder(1024);
-            var result = ElkaFx_EnsureRealtimePrepared(status, status.Capacity);
-            statusText = status.ToString();
-            if (result != 0 && statusText.Length > 0)
-            {
-                _lastStatus = statusText;
-            }
-
-            return result;
-        }
-        catch (SEHException ex)
-        {
-            statusText = $"Realtime prepare failed: {ex.Message}";
-            _lastStatus = statusText;
-            return -1;
-        }
-    }
-
-    public int GetPatchAsioChannel(int inputChannel)
-    {
-        return _attached ? ElkaFx_GetPatchAsioChannel(Math.Max(0, inputChannel)) : -1;
-    }
-
-    public int GetPatchInsertEnabled(int inputChannel)
-    {
-        return _attached ? ElkaFx_GetPatchInsertEnabled(Math.Max(0, inputChannel)) : -1;
-    }
-
-    public bool SetPatchInsertEnabled(int inputChannel, bool enabled)
-    {
-        return _attached && ElkaFx_SetPatchInsertEnabled(Math.Max(0, inputChannel), enabled ? 1 : 0) == 0;
-    }
-
-    public int GetPatchPostFxInsertEnabled()
-    {
-        return _attached ? ElkaFx_GetPatchPostFxInsertEnabled() : -1;
-    }
-
-    public string DetectInsertAsio(VoicemeeterKind kind)
+    public string DetectAsioDriver()
     {
         if (!_attached) return _lastStatus;
-        var status = new StringBuilder(2048);
-        try
-        {
-            ElkaFx_DetectInsertAsio(VoicemeeterIoLayout.InputChannelCount(kind), status, status.Capacity);
-        }
-        catch (SEHException ex)
-        {
-            status.Clear().Append($"Insert ASIO detection failed: {ex.Message}");
-        }
+        var status = new StringBuilder(1024);
+        try { ElkaFx_DetectAsioDriver(status, status.Capacity); }
+        catch (SEHException ex) { status.Clear().Append($"ASIO driver detection failed: {ex.Message}"); }
         return status.ToString();
     }
 
-    public InsertAsioDriverInfo? GetInsertAsioDriverInfo()
+    public AsioDriverInfo? GetAsioDriverInfo()
     {
         if (!_attached) return null;
-        var name = new StringBuilder(1024);
+        var name = new StringBuilder(256);
         try
         {
-            return ElkaFx_GetInsertAsioDriverInfo(name, name.Capacity, out var inputs, out var outputs) == 0
+            return ElkaFx_GetAsioDriverInfo(name, name.Capacity, out var inputs, out var outputs) == 0
                 ? new(name.ToString(), inputs, outputs) : null;
         }
         catch (SEHException) { return null; }
     }
 
-    public string ProbeInsertAsio(VoicemeeterKind kind)
+    public string StartAsioLink()
     {
-        if (!_attached)
-        {
-            return _lastStatus;
-        }
-
+        if (!_attached) return _lastStatus;
         var status = new StringBuilder(1024);
-        try
-        {
-            ElkaFx_ProbeInsertAsio(VoicemeeterIoLayout.InputChannelCount(kind), status, status.Capacity);
-        }
-        catch (SEHException ex)
-        {
-            status.Clear();
-            status.Append($"Insert ASIO probe failed: {ex.Message}");
-        }
-
+        try { ElkaFx_StartAsioLink(status, status.Capacity); }
+        catch (SEHException ex) { status.Clear().Append($"ASIO link start failed: {ex.Message}"); }
         _lastStatus = status.ToString();
         return _lastStatus;
     }
 
-    public string StartInsertAsio(VoicemeeterKind kind)
+    public string StopAsioLink()
     {
-        if (!_attached)
-        {
-            return _lastStatus;
-        }
-
+        if (!_attached) return _lastStatus;
         var status = new StringBuilder(1024);
-        try
-        {
-            ElkaFx_StartInsertAsio(VoicemeeterIoLayout.InputChannelCount(kind), status, status.Capacity);
-        }
-        catch (SEHException ex)
-        {
-            status.Clear();
-            status.Append($"Insert ASIO start failed: {ex.Message}");
-        }
-
+        ElkaFx_StopAsioLink(status, status.Capacity);
         _lastStatus = status.ToString();
         return _lastStatus;
     }
 
-    public int RestartInsertAsioIfFormatChanged(VoicemeeterKind kind, out string restartStatus)
+    public string AsioLinkStatus()
     {
-        if (!_attached)
-        {
-            restartStatus = _lastStatus;
-            return -1;
-        }
-
+        if (!_attached) return "Native engine is not attached.";
         var status = new StringBuilder(1024);
-        int result;
-        try
-        {
-            result = ElkaFx_RestartInsertAsioIfFormatChanged(VoicemeeterIoLayout.InputChannelCount(kind), status, status.Capacity);
-        }
-        catch (SEHException ex)
-        {
-            status.Clear();
-            status.Append($"Insert ASIO format monitor failed: {ex.Message}");
-            result = -1;
-        }
-
-        restartStatus = status.ToString();
-        if (result != 0)
-        {
-            _lastStatus = restartStatus;
-        }
-
-        return result;
-    }
-
-    public int CheckInsertAsioFormatChanged(out string checkStatus)
-    {
-        if (!_attached)
-        {
-            checkStatus = _lastStatus;
-            return -1;
-        }
-
-        var status = new StringBuilder(1024);
-        int result;
-        try
-        {
-            result = ElkaFx_CheckInsertAsioFormatChanged(status, status.Capacity);
-        }
-        catch (SEHException ex)
-        {
-            status.Clear();
-            status.Append($"Insert ASIO format check failed: {ex.Message}");
-            result = -1;
-        }
-
-        checkStatus = status.ToString();
-        return result;
-    }
-
-    public string StopInsertAsio()
-    {
-        if (!_attached)
-        {
-            return _lastStatus;
-        }
-
-        var status = new StringBuilder(1024);
-        ElkaFx_StopInsertAsio(status, status.Capacity);
-        _lastStatus = status.ToString();
-        return _lastStatus;
-    }
-
-    public string InsertAsioStatus()
-    {
-        if (!_attached)
-        {
-            return "Native engine is not attached.";
-        }
-
-        var status = new StringBuilder(1024);
-        ElkaFx_GetInsertAsioStatus(status, status.Capacity);
+        ElkaFx_GetAsioLinkStatus(status, status.Capacity);
         return status.ToString();
     }
 
-    public bool IsInsertAsioRunning => _attached && ElkaFx_IsInsertAsioRunning() != 0;
-    public bool IsInsertAsioOpen => _attached && ElkaFx_IsInsertAsioOpen() != 0;
+    public bool IsAsioLinkRunning => _attached && ElkaFx_IsAsioLinkRunning() != 0;
+    public bool IsAsioDriverStreaming => _attached && ElkaFx_IsAsioDriverStreaming() != 0;
+    public bool IsAsioDriverRegistered => _attached && ElkaFx_IsAsioDriverRegistered() != 0;
+
+    public string SetAsioChannelCount(int channels)
+    {
+        if (!_attached) return _lastStatus;
+        var status = new StringBuilder(512);
+        ElkaFx_SetAsioChannelCount(channels, status, status.Capacity);
+        return status.ToString();
+    }
 
     public void ApplyOutputBoosts(IReadOnlyDictionary<(int Stream, int Channel), int> desired)
     {
@@ -1692,23 +1343,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
 
     }
 
-    public void SetInputCallbackSuppressedChannel(int channel, bool suppressed)
-    {
-        if (!_attached)
-        {
-            return;
-        }
-
-        channel = Math.Max(0, channel);
-        if (_inputCallbackSuppressionCache.TryGetValue(channel, out var current) && current == suppressed)
-        {
-            return;
-        }
-
-        ElkaFx_SetInputCallbackSuppressedChannel(channel, suppressed ? 1 : 0);
-        _inputCallbackSuppressionCache[channel] = suppressed;
-    }
-
     public void ApplyRoutes(IEnumerable<DirectRouteSummary> routes)
     {
         if (!_attached)
@@ -1741,23 +1375,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
             _lastDirectRouteSignature = routeSignature;
         }
 
-        var effectiveMode = _requestedMode;
-        if (routeList.Any(static route => route.Mode == CallbackMode.Input))
-        {
-            effectiveMode |= CallbackMode.Input | CallbackMode.Output;
-        }
-
-        if (routeList.Any(static route => route.Mode == CallbackMode.Output))
-        {
-            effectiveMode |= CallbackMode.Output;
-        }
-
-        if (routeList.Any(static route => route.Mode == CallbackMode.Main))
-        {
-            effectiveMode |= CallbackMode.Main;
-        }
-
-        SetMode(effectiveMode);
     }
 
     public void ApplyPluginPassthroughRoutes(IEnumerable<PluginPassthroughRouteSummary> routes)
@@ -1788,13 +1405,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
             _lastPluginPassthroughRouteSignature = routeSignature;
         }
 
-        var effectiveMode = _requestedMode;
-        foreach (var mode in routeList.Select(static route => route.Mode).Distinct())
-        {
-            effectiveMode |= mode;
-        }
-
-        SetMode(effectiveMode);
     }
 
     private static string DirectRouteSignature(IEnumerable<DirectRouteSummary> routes)
@@ -2395,35 +2005,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
     }
 
 
-    private void SetMode(CallbackMode mode, bool force = false)
-    {
-        mode &= AllowedCallbackModes;
-        if (!_attached)
-        {
-            return;
-        }
-
-        var stats = GetStats();
-        if (!force && mode == _appliedMode && stats.ConnectionState == NativeConnectionRunning)
-        {
-            return;
-        }
-
-        var status = new StringBuilder(512);
-        var result = force
-            ? ElkaFx_RearmMode((int)mode, status, status.Capacity)
-            : ElkaFx_SetMode((int)mode, status, status.Capacity);
-        if (result == 0)
-        {
-            _appliedMode = mode;
-        }
-
-        if (result == 0 || status.Length > 0)
-        {
-            _lastStatus = status.ToString();
-        }
-    }
-
     private static NativeStats GetStats()
     {
         var stats = new NativeStats();
@@ -2559,26 +2140,38 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
         public ulong PrePluginPopCountInsertAsio;
     }
 
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern int ElkaFx_DetectAsioDriver(StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern int ElkaFx_GetAsioDriverInfo(StringBuilder name, int nameChars, out int inputs, out int outputs);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern int ElkaFx_StartAsioLink(StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern void ElkaFx_StopAsioLink(StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern void ElkaFx_GetAsioLinkStatus(StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_IsAsioLinkRunning();
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_IsAsioDriverStreaming();
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_IsAsioDriverRegistered();
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    private static extern int ElkaFx_SetAsioChannelCount(int channels, StringBuilder status, int statusChars);
+
     [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_Initialize(StringBuilder status, int statusChars);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_GetVoicemeeterType();
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void ElkaFx_Shutdown();
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_SetMode(int mode, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_RearmMode(int mode, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_Start(StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_EnsureRealtimePrepared(StringBuilder status, int statusChars);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void ElkaFx_SetTargetRange(int kind, int startChannel, int channelCount);
@@ -2593,9 +2186,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
         int enabled,
         int delayMilliseconds,
         int gainPercent);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern void ElkaFx_SetInputCallbackSuppressedChannel(int channel, int suppressed);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void ElkaFx_SetDirectRoutes(
@@ -2614,65 +2204,6 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData, IInser
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern void ElkaFx_GetStats(ref NativeStats stats);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_GetPatchAsioChannel(int inputChannel);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_RefreshVoicemeeterParameters();
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_IsVoicemeeterRemoteReady();
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_SetVoicemeeterCustomButton(
-        int buttonIndex,
-        int buttonType,
-        int buttonState,
-        string label,
-        IntPtr commandWindow,
-        int commandId,
-        StringBuilder status,
-        int statusChars);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_GetPatchInsertEnabled(int inputChannel);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_GetPatchPostFxInsertEnabled();
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_ProbeInsertAsio(int expectedChannelCount, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_DetectInsertAsio(int expectedChannelCount, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_GetInsertAsioDriverInfo(StringBuilder name, int nameChars, out int inputs, out int outputs);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_StartInsertAsio(int expectedChannelCount, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_RestartInsertAsioIfFormatChanged(int expectedChannelCount, StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_CheckInsertAsioFormatChanged(StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern void ElkaFx_StopInsertAsio(StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
-    private static extern void ElkaFx_GetInsertAsioStatus(StringBuilder status, int statusChars);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_IsInsertAsioRunning();
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_IsInsertAsioOpen();
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    private static extern int ElkaFx_SetPatchInsertEnabled(int inputChannel, int enabled);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_GetPluginCount();

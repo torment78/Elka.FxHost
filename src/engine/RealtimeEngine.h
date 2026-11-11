@@ -210,7 +210,7 @@ public:
 
 private:
     friend struct OutputBoostTestAccess;
-    static constexpr int MaxChannels = 64;
+    static constexpr int MaxChannels = 128;
     static constexpr int DelayStreamCount = 4;
 
     using GainBank = std::array<std::atomic<int>, MaxChannels>;

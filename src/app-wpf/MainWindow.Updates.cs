@@ -27,6 +27,9 @@ public partial class MainWindow
 
     private async Task CheckStartupUpdatesAsync()
     {
+        // Elka FX Host has no published releases yet; never pull VoiceMeeter FX Host installers.
+        if (!ApplicationUpdates.AutomaticChecksEnabled)
+            return;
         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
         if (!_isShuttingDown)
             await CheckForUpdatesAsync(_settings.CheckStableUpdatesAutomatically, _settings.CheckBetaUpdatesAutomatically);

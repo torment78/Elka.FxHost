@@ -9,10 +9,11 @@ public partial class MainWindow
 
     private void ApplyAdvancedModeVisibility()
     {
-        var visibility = _advancedModeActive ? Visibility.Visible : Visibility.Collapsed;
-        SideIoCard.Visibility = visibility;
-        ChannelsWorkspaceButton.Visibility = visibility;
-        VstInputDirectButton.Visibility = visibility;
+        // Elka FX Host has one canvas and no delay/volume channel workspace.
+        SideIoCard.Visibility = Visibility.Collapsed;
+        ChannelsWorkspaceButton.Visibility = Visibility.Collapsed;
+        VstInputDirectButton.Visibility = Visibility.Collapsed;
+        VstRouteViewPanel.Visibility = Visibility.Collapsed;
     }
 
     private void RestartWithAdvancedMode(Window menu, Button toggle)

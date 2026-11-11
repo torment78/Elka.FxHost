@@ -15,7 +15,8 @@ internal sealed record AvailableUpdates(ApplicationUpdate? Stable, ApplicationUp
 
 internal sealed class ApplicationUpdates
 {
-    internal const string Repository = "torment78/Elka.VoiceMeeterFxHost";
+    internal const string Repository = "torment78/Elka.FxHost";
+    internal static readonly bool AutomaticChecksEnabled = false;
     private const long MaximumInstallerSize = 256 * 1024 * 1024;
     private static readonly HttpClient SharedClient = CreateClient();
     private readonly HttpClient _client;
@@ -25,7 +26,7 @@ internal sealed class ApplicationUpdates
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("ElkaVoiceMeeterFxHost-Updater/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("ElkaFxHost-Updater/1.0");
         return client;
     }
 

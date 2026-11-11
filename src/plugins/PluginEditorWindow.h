@@ -63,7 +63,7 @@ public:
         const auto local = juce::SystemStats::getEnvironmentVariable("LOCALAPPDATA", {});
         if (local.isEmpty()) return {};
         const auto identity = plugin.getPluginDescription().createIdentifierString() + "|" + title;
-        return juce::File(local).getChildFile("ElkaSoft/VoiceMeeterFxHost/EditorWindows")
+        return juce::File(local).getChildFile("ElkaSoft/FxHost/EditorWindows")
             .getChildFile(juce::String::toHexString(identity.hashCode64()) + ".bounds");
     }
 

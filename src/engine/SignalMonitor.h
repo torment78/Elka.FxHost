@@ -32,7 +32,7 @@ public:
     // Open/read/close are serialized by the control API, never called by audio.
     int open(int stream, bool output, int first, int count)
     {
-        if (stream < 0 || stream > 2 || first < 0 || first >= 64 || count < 1 || count > Channels || first + count > 64)
+        if (stream < 0 || stream > 2 || first < 0 || first >= 128 || count < 1 || count > Channels || first + count > 128)
             return 0;
         for (int i = 0; i < Capacity; ++i)
         {

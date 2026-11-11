@@ -21,8 +21,7 @@ public partial class MainWindow
         foreach (var settings in _settingsByEndpoint.Values)
         {
             if (settings.Mode is not (CallbackMode.Input or CallbackMode.Output) ||
-                (activeMode & settings.Mode) == 0 || settings.OutputBoostDb == 0 ||
-                IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _)) continue;
+                (activeMode & settings.Mode) == 0 || settings.OutputBoostDb == 0) continue;
             var available = VoicemeeterIoLayout.GetEndpoints(settings.Mode, _kind);
             if (!available.Any(endpoint => endpoint == settings.Endpoint)) continue;
             int stream = settings.Mode == CallbackMode.Output ? 1 : 0;
@@ -46,7 +45,7 @@ public partial class MainWindow
         {
             settings.OutputBoostDb = value;
             SyncOutputBoosts(_startupEngineDelayActive ? CallbackMode.None :
-                IsInsertAsioPatchExclusiveActive() ? CallbackMode.Input : ComputeActiveCallbackMode());
+                CallbackMode.Input);
             QueueSave();
         };
         badge.CustomRequested += () => ShowCustomOutputBoost(badge);

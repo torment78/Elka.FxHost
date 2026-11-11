@@ -32,8 +32,8 @@ public partial class MainWindow
     private bool EndpointHotkeyStreamAvailable(int stream) => stream switch
     {
         0 => true,
-        1 => !IsInsertAsioPatchExclusiveActive(),
-        2 => _advancedModeActive && !IsInsertAsioPatchExclusiveActive(),
+        1 => !IsSingleAsioCanvas(),
+        2 => _advancedModeActive && !IsSingleAsioCanvas(),
         _ => false
     };
 

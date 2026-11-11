@@ -29,7 +29,6 @@ public partial class MainWindow : Window
     private PluginScanProgressWindow? _pluginScanWindow;
     private FxHostSettings _settings = new();
     private VoicemeeterKind _kind = VoicemeeterKind.Potato;
-    private bool _voicemeeterKindDetectedFromApi;
     private VoicemeeterKind _workspaceSourceKind = VoicemeeterKind.Unknown;
     private bool _restoredSavedEditionWorkspace;
     private bool _normalizedEndpointLayout;
@@ -58,10 +57,6 @@ public partial class MainWindow : Window
     private string? _selectedDirectChannelRouteKey;
     private int _expandedCrossRouteBusIndex = -1;
     private int _selectedCrossRouteBusIndex = -1;
-    private bool? _lastSelectedPatchBypassState;
-    private bool _updatingInsertAsioControls;
-    private bool _insertAsioFormatRestartInProgress;
-    private DateTimeOffset _lastInsertAsioPatchStateSyncAt;
     private string? _draggingEndpointKey;
     private CallbackMode _draggingEndpointMode = CallbackMode.None;
     private IoEndpoint? _draggingEndpoint;
@@ -95,38 +90,18 @@ public partial class MainWindow : Window
     private DateTimeOffset _pluginNodeLoadStartedAt;
     private bool _startupEngineDelayActive;
     private DateTimeOffset _startupEngineDelayEndsAt;
-    private bool _realtimeCallbackMonitorInitialized;
-    private ulong _lastRealtimeCallbackBufferCount;
-    private int _lastRealtimeCallbackSampleRate;
-    private int _lastRealtimeCallbackBlockSize;
-    private DateTimeOffset _lastRealtimeCallbackActivityAt;
-    private DateTimeOffset _lastRealtimeFormatChangeAt;
-    private DateTimeOffset _lastRealtimeCallbackRearmAt;
-    private DateTimeOffset _lastRealtimeFormatRecoveryAt;
-    private DateTimeOffset _lastVoicemeeterParameterRefreshAt;
-    private int _realtimeCallbackRecoveryAttempts;
-    private bool _pendingRealtimeFormatRecovery;
     private Forms.NotifyIcon? _trayIcon;
     private System.Drawing.Icon? _trayIconHandle;
     private WindowState _windowStateBeforeTray = WindowState.Normal;
 
     internal bool ShouldStartHiddenToTray { get; private set; }
     private bool _isShuttingDown;
+    private IntPtr _windowHandle;
     private bool _trayCloseHintShown;
-    private HwndSource? _windowMessageSource;
-    private IntPtr _voicemeeterCommandWindow;
-    private readonly VoicemeeterButtonRegistration _voicemeeterButtonRegistration = new();
-    private bool _voicemeeterCustomButtonRemovalStarted;
-    private bool _voicemeeterCustomButtonUnavailable;
-    private string _lastVoicemeeterCustomButtonFailure = string.Empty;
 
     private const double MinimumVisibleWindowWidth = 160.0;
     private const double MinimumVisibleWindowHeight = 48.0;
 
-    private static readonly bool InsertAsioPatchControlEnabled = true;
-    private const string InsertAsioPatchDisabledMessage = "ASIO Patch is disabled in this build.";
-    private const int VoicemeeterCustomButtonIndex = 0;
-    private const int VoicemeeterCustomButtonPushType = 1;
     private const int DefaultVbanControlPort = 6981;
     private const string DefaultVbanControlStreamName = "Command1";
     private const string PluginChoiceDragFormat = "ElkaVoiceMeeterFxHost.PluginChoice";
@@ -278,35 +253,18 @@ public partial class MainWindow : Window
             ShowInTaskbar = false;
         }
 
-        if (!InsertAsioPatchControlEnabled)
-        {
-            _settings.InsertAsioAutoStart = false;
-            _settings.InsertAsioEndpointKeys?.Clear();
-        }
         var startupDelaySeconds = ConfiguredStartupDelaySeconds();
         _startupEngineDelayActive = startupDelaySeconds > 0;
 
-        DetectStartupInsertAsioDriver();
-        BuildInsertAsioEndpointToggles();
-        SetInsertAsioAutoStartCheckBox(_settings.InsertAsioAutoStart);
-        ApplyInsertAsioPatchAvailability();
-        InsertAsioStatusTextBlock.Text = InsertAsioPatchControlEnabled ? _engine.InsertAsioStatus() : InsertAsioPatchDisabledMessage;
+        MixerTypeTextBlock.Text = $"Virtual ASIO | {FxHostEdition.ChannelCount} channels ({FxHostEdition.PresetLabel(FxHostEdition.ChannelCount)})";
+        UpdateAsioDriverDisplay();
+        AppendLog(_engine.DetectAsioDriver());
         UpdatePluginFormatButtons();
         PopulatePluginList();
         SelectMode(_selectedMode);
         SelectWorkspaceView(WorkspaceView.Vst);
         ApplyVbanControlSettingsFromUi(showErrors: false);
         AppendLog("Ready.");
-        AppendLog(_voicemeeterKindDetectedFromApi
-            ? $"Detected running {VoicemeeterKindInfo.DisplayName(_kind)} from the VoiceMeeter Remote API."
-            : $"VoiceMeeter edition was not available from the Remote API; using saved {VoicemeeterKindInfo.DisplayName(_kind)} layout.");
-        if (_workspaceSourceKind != VoicemeeterKind.Unknown && _workspaceSourceKind != _kind)
-        {
-            var action = _restoredSavedEditionWorkspace ? "Restored its saved workspace." : "Started a new workspace.";
-            AppendLog(
-                $"VoiceMeeter edition changed from {VoicemeeterKindInfo.DisplayName(_workspaceSourceKind)} to " +
-                $"{VoicemeeterKindInfo.DisplayName(_kind)}. {action} The previous workspace remains stored and inactive.");
-        }
         if (_normalizedEndpointLayout)
         {
             AppendLog("Reset overlapping endpoint positions to the default ordered layout.");
@@ -374,7 +332,6 @@ public partial class MainWindow : Window
 
         _startupEngineDelayActive = true;
         _startupEngineDelayEndsAt = DateTimeOffset.Now.AddSeconds(delaySeconds);
-        _engine.ForceDisconnectRealtimeCallback();
         AppendLog($"Startup delay enabled: waiting {delaySeconds}s before starting the audio engine.");
 
         _startupDelayTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -402,27 +359,8 @@ public partial class MainWindow : Window
         AppendLog(_engine.StatusText);
         UpdateLiveStatusText();
 
-        if (InsertAsioPatchControlEnabled && _settings.InsertAsioAutoStart)
-        {
-            Dispatcher.BeginInvoke(
-                new Action(() => StartInsertAsioFromUi(rememberRunning: true)),
-                DispatcherPriority.ApplicationIdle);
-        }
-    }
-
-    private void ApplyInsertAsioPatchAvailability()
-    {
-        if (InsertAsioPatchControlEnabled)
-        {
-            return;
-        }
-
-        AsioPatchToggleButton.Content = "ASIO Patch (parked)";
-        AsioPatchToggleButton.IsEnabled = false;
-        AsioPatchToggleButton.ToolTip = InsertAsioPatchDisabledMessage;
-        AsioPatchContentGrid.Visibility = Visibility.Collapsed;
-        InsertAsioAutoStartCheckBox.IsEnabled = false;
-        InsertAsioEndpointTogglesPanel.IsEnabled = false;
+        // The ASIO link always runs with the app: Matrix can open the driver at any time.
+        Dispatcher.BeginInvoke(new Action(StartAsioLinkFromUi), DispatcherPriority.ApplicationIdle);
     }
 
     private static System.Drawing.Icon CreateTrayIcon()
@@ -692,17 +630,6 @@ public partial class MainWindow : Window
         ToggleCardContent(VbanTextContentGrid);
     }
 
-    private void AsioPatchToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            AppendLog(InsertAsioPatchDisabledMessage);
-            return;
-        }
-
-        ToggleCardContent(AsioPatchContentGrid);
-    }
-
     private void LogHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var collapse = LogTextBox.Visibility == Visibility.Visible || RouteSummaryTextBlock.Visibility == Visibility.Visible;
@@ -965,373 +892,6 @@ public partial class MainWindow : Window
         }
     }
 
-
-    private void ProbeInsertAsioButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            AppendLog(InsertAsioPatchDisabledMessage);
-            return;
-        }
-
-        if (!SupportsInsertAsio || _engine.IsInsertAsioRunning || _engine.IsInsertAsioOpen)
-            return;
-        var status = _engine.DetectInsertAsio(_kind);
-        InsertAsioStatusTextBlock.Text = status;
-        UpdateInsertAsioDriverDisplay();
-        AppendLog(status);
-    }
-
-    private void StartInsertAsioButton_Click(object sender, RoutedEventArgs e)
-    {
-        StartInsertAsioFromUi(rememberRunning: true);
-    }
-
-    private void StartInsertAsioFromUi(bool rememberRunning)
-    {
-        if (!InsertAsioPatchControlEnabled || !SupportsInsertAsio)
-        {
-            _settings.InsertAsioAutoStart = false;
-            SetInsertAsioAutoStartCheckBox(false);
-            var message = SupportsInsertAsio ? InsertAsioPatchDisabledMessage
-                : "ASIO Patch requires VoiceMeeter Banana or Potato.";
-            InsertAsioStatusTextBlock.Text = message;
-            AppendLog(message);
-            QueueSave();
-            return;
-        }
-
-        ForceDisconnectRealtimeCallbackForInsertAsio("start");
-        var status = _engine.StartInsertAsio(_kind);
-        InsertAsioStatusTextBlock.Text = status;
-        AppendLog(status);
-        if (_engine.IsInsertAsioRunning)
-        {
-            ApplyInsertAsioPatchSelection();
-            if (rememberRunning)
-            {
-                _settings.InsertAsioAutoStart = true;
-                SetInsertAsioAutoStartCheckBox(true);
-                QueueSave();
-            }
-        }
-
-        RefreshAfterInsertAsioStateChange();
-    }
-
-    private void StopInsertAsioButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            AppendLog(InsertAsioPatchDisabledMessage);
-            return;
-        }
-
-        var status = _engine.StopInsertAsio();
-        DisableAllInsertAsioPatchChannels(clearEndpointKeys: true);
-        InsertAsioStatusTextBlock.Text = status;
-        AppendLog(status);
-        _settings.InsertAsioAutoStart = false;
-        SetInsertAsioAutoStartCheckBox(false);
-        QueueSave();
-        RefreshAfterInsertAsioStateChange();
-    }
-
-    private void InsertAsioAutoStart_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_loading || _updatingInsertAsioControls)
-        {
-            return;
-        }
-
-        if (!InsertAsioPatchControlEnabled)
-        {
-            _settings.InsertAsioAutoStart = false;
-            SetInsertAsioAutoStartCheckBox(false);
-            QueueSave();
-            return;
-        }
-
-        _settings.InsertAsioAutoStart = InsertAsioAutoStartCheckBox.IsChecked == true;
-        QueueSave();
-    }
-
-    private void SetInsertAsioAutoStartCheckBox(bool value)
-    {
-        _updatingInsertAsioControls = true;
-        try
-        {
-            InsertAsioAutoStartCheckBox.IsChecked = value;
-        }
-        finally
-        {
-            _updatingInsertAsioControls = false;
-        }
-    }
-
-    private void BuildInsertAsioEndpointToggles()
-    {
-        SyncInsertAsioEndpointKeysFromPatchInsertState(updateToggles: false, queueSave: false);
-        _updatingInsertAsioControls = true;
-        try
-        {
-            InsertAsioEndpointTogglesPanel.Children.Clear();
-            _insertAsioToggles.Clear();
-            _settings.InsertAsioEndpointKeys ??= [];
-            if (!InsertAsioPatchControlEnabled)
-            {
-                InsertAsioEndpointTogglesPanel.Children.Add(new TextBlock
-                {
-                    Text = InsertAsioPatchDisabledMessage,
-                    TextWrapping = TextWrapping.Wrap,
-                    Style = (Style)FindResource("MutedText")
-                });
-                return;
-            }
-
-            foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-            {
-                var key = endpoint.Key(CallbackMode.Input);
-                var liveState = PatchInsertStateForEndpoint(endpoint);
-                var toggle = new CheckBox
-                {
-                    Content = PatchInsertLabel(endpoint, liveState),
-                    Tag = endpoint,
-                    IsThreeState = false,
-                    IsChecked = liveState == true,
-                    Foreground = (Brush)FindResource("RouteAccentBrush"),
-                    Margin = new Thickness(0, 0, 12, 6),
-                    ToolTip = "Live VoiceMeeter Patch.insert state for this input. Checked routes the input through ASIO Patch; unchecked leaves it on the normal callback path."
-                };
-
-                toggle.Checked += InsertAsioEndpointToggle_Changed;
-                toggle.Unchecked += InsertAsioEndpointToggle_Changed;
-                _insertAsioToggles[key] = toggle;
-                InsertAsioEndpointTogglesPanel.Children.Add(toggle);
-            }
-        }
-        finally
-        {
-            _updatingInsertAsioControls = false;
-        }
-    }
-
-    private void InsertAsioEndpointToggle_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_loading || _updatingInsertAsioControls || !InsertAsioPatchControlEnabled || sender is not CheckBox { Tag: IoEndpoint endpoint } toggle)
-        {
-            return;
-        }
-
-        var enabled = toggle.IsChecked == true;
-        SetInsertAsioEndpointArmed(endpoint, enabled);
-        QueueSave();
-        if (!InsertAsioPatchClient.IsInsertAsioRunning && enabled)
-        {
-            AppendLog($"{endpoint.Name}: Patch.insert enabled while ASIO Patch is stopped; normal callback audio for this input is routed through VoiceMeeter's insert path until ASIO Patch is started or this is unchecked.");
-        }
-
-        ApplyInsertAsioPatchSelection(endpoint);
-        RefreshAfterInsertAsioStateChange();
-    }
-
-    private void SetInsertAsioEndpointArmed(IoEndpoint endpoint, bool armed)
-    {
-        _settings.InsertAsioEndpointKeys ??= [];
-        var key = endpoint.Key(CallbackMode.Input);
-        _settings.InsertAsioEndpointKeys.RemoveAll(existing => string.Equals(existing, key, StringComparison.OrdinalIgnoreCase));
-        if (armed)
-        {
-            _settings.InsertAsioEndpointKeys.Add(key);
-        }
-    }
-
-    private bool IsEndpointArmedForInsertAsio(IoEndpoint endpoint)
-    {
-        _settings.InsertAsioEndpointKeys ??= [];
-        var key = endpoint.Key(CallbackMode.Input);
-        return _settings.InsertAsioEndpointKeys.Contains(key, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private bool? PatchInsertStateForEndpoint(IoEndpoint endpoint)
-    {
-        return _insertAsioEndpointStates.TryGetValue(endpoint.Key(CallbackMode.Input), out var state)
-            ? state : IsEndpointArmedForInsertAsio(endpoint);
-    }
-
-    private bool TryReadPatchInsertState(IoEndpoint endpoint, out bool? state)
-    {
-        state = null;
-        var mixed = false;
-        for (var channel = endpoint.Range.Start; channel <= endpoint.Range.End; channel++)
-        {
-            var value = InsertAsioPatchClient.GetPatchInsertEnabled(channel);
-            if (value < 0)
-            {
-                return false;
-            }
-
-            var enabled = value != 0;
-            state ??= enabled;
-            if (state.Value != enabled)
-            {
-                mixed = true;
-            }
-        }
-
-        if (mixed) state = null;
-        return true;
-    }
-
-    private void SetPatchInsertForEndpoint(IoEndpoint endpoint, bool enabled)
-    {
-        var key = endpoint.Key(CallbackMode.Input);
-        _pendingInsertAsioStates[key] = (enabled, Environment.TickCount64);
-        UpdatePatchInsertToggle(endpoint, enabled);
-        var suppressCallback = InsertAsioPatchClient.IsInsertAsioRunning && enabled;
-        for (var channel = endpoint.Range.Start; channel <= endpoint.Range.End; channel++)
-        {
-            InsertAsioPatchClient.SetInputCallbackSuppressedChannel(channel, suppressCallback);
-            InsertAsioPatchClient.SetPatchInsertEnabled(channel, enabled);
-        }
-    }
-
-    private void DisableAllInsertAsioPatchChannels(bool clearEndpointKeys)
-    {
-        if (clearEndpointKeys)
-        {
-            _settings.InsertAsioEndpointKeys?.Clear();
-        }
-
-        foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-        {
-            SetPatchInsertForEndpoint(endpoint, false);
-        }
-    }
-
-    private bool SyncInsertAsioEndpointKeysFromPatchInsertState(bool updateToggles, bool queueSave, long? nowMilliseconds = null)
-    {
-        // Refresh once for the entire read batch; never instantiate UI controls here.
-        if (!InsertAsioPatchControlEnabled || !SupportsInsertAsio)
-        {
-            return false;
-        }
-
-        _settings.InsertAsioEndpointKeys ??= [];
-        var refreshed = InsertAsioPatchClient.RefreshVoicemeeterParameters();
-        var changed = false;
-        var now = nowMilliseconds ?? Environment.TickCount64;
-        foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-        {
-            var key = endpoint.Key(CallbackMode.Input);
-            bool? liveState = null;
-            var hasLiveState = refreshed && TryReadPatchInsertState(endpoint, out liveState);
-            if (hasLiveState) _insertAsioLiveStates[key] = liveState;
-            if (_pendingInsertAsioStates.TryGetValue(key, out var pending))
-            {
-                if (hasLiveState && liveState == pending.Desired)
-                    _pendingInsertAsioStates.Remove(key);
-                else if (now - pending.MarkedAt < 2000)
-                    continue;
-                else
-                {
-                    _pendingInsertAsioStates.Remove(key);
-                    AppendLog($"VoiceMeeter did not accept Patch.insert for {endpoint.Name}");
-                    // A disconnected Remote API must not keep a request pending forever.
-                    if (!hasLiveState) hasLiveState = _insertAsioLiveStates.TryGetValue(key, out liveState);
-                }
-            }
-            if (!hasLiveState) continue;
-
-            if (updateToggles) UpdatePatchInsertToggle(endpoint, liveState);
-            else _insertAsioEndpointStates[key] = liveState;
-
-            var currentlySaved = _settings.InsertAsioEndpointKeys.Contains(key, StringComparer.OrdinalIgnoreCase);
-            if ((liveState == true) == currentlySaved)
-            {
-                continue;
-            }
-
-            SetInsertAsioEndpointArmed(endpoint, liveState == true);
-            changed = true;
-        }
-
-        if (changed && queueSave)
-        {
-            QueueSave();
-        }
-
-        return changed;
-    }
-    private void ApplyInsertAsioPatchSelection(IoEndpoint? changedEndpoint = null)
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            DisableAllInsertAsioPatchChannels(clearEndpointKeys: true);
-            return;
-        }
-
-        foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-        {
-            if (changedEndpoint is not null && endpoint != changedEndpoint) continue;
-            SetPatchInsertForEndpoint(endpoint, IsEndpointArmedForInsertAsio(endpoint));
-        }
-    }
-
-    private void SyncInputCallbackSuppression()
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-            {
-                for (var channel = endpoint.Range.Start; channel <= endpoint.Range.End; channel++)
-                {
-                    _engine.SetInputCallbackSuppressedChannel(channel, false);
-                }
-            }
-
-            return;
-        }
-
-        var insertAsioRunning = _engine.IsInsertAsioRunning;
-        foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(CallbackMode.Input, _kind))
-        {
-            var armed = insertAsioRunning && IsEndpointArmedForInsertAsio(endpoint);
-            for (var channel = endpoint.Range.Start; channel <= endpoint.Range.End; channel++)
-            {
-                _engine.SetInputCallbackSuppressedChannel(channel, armed);
-            }
-        }
-    }
-
-    private void RefreshAfterInsertAsioStateChange()
-    {
-        SyncInsertAsioEndpointKeysFromPatchInsertState(updateToggles: true, queueSave: true);
-        _lastSelectedPatchBypassState = null;
-        UpdateInsertAsioDriverDisplay();
-        ApplyEngineState();
-        var rebuildEndpointButtons = false;
-        if (IsInsertAsioPatchExclusiveActive() && _selectedMode != CallbackMode.Input)
-        {
-            _vstCanvasMode = CallbackMode.Input;
-            _vstInputCanvasRouteView = VstInputCanvasRouteView.InputReturn;
-            SetSelectedSideMode(CallbackMode.Input);
-            rebuildEndpointButtons = true;
-        }
-        if (CoerceVstRouteViewForInsertAsio())
-        {
-            rebuildEndpointButtons = true;
-        }
-        if (rebuildEndpointButtons)
-        {
-            BuildEndpointButtons();
-        }
-        RefreshVstRouteViewButtons();
-        RefreshEndpointButtonSelection();
-        BuildChannelStrips();
-        RebuildRoutingCanvas();
-        UpdateLiveStatusText();
-    }
 
     private void OpenVfxCommandsButton_Click(object sender, RoutedEventArgs e)
     {
@@ -1711,7 +1271,7 @@ public partial class MainWindow : Window
         {
             Title = "Export FX Host Save",
             Filter = "Elka FX Host Save (*.json)|*.json|All files (*.*)|*.*",
-            FileName = $"VoiceMeeterFxHost-{DateTime.Now:yyyyMMdd-HHmmss}.json",
+            FileName = $"FxHost-{DateTime.Now:yyyyMMdd-HHmmss}.json",
             AddExtension = true,
             DefaultExt = ".json",
             OverwritePrompt = true
@@ -1971,17 +1531,13 @@ public partial class MainWindow : Window
         _settings.EditionWorkspaces ??= [];
         _settings.InsertAsioEndpointKeys ??= [];
         _settings.StartupDelaySeconds = SanitizeStartupDelaySeconds(_settings.StartupDelaySeconds);
-        _pendingInsertAsioStates.Clear();
-        _insertAsioEndpointStates.Clear();
-        _insertAsioLiveStates.Clear();
 
         var savedKind = _settings.Kind == VoicemeeterKind.Unknown
             ? VoicemeeterKind.Potato
             : _settings.Kind;
-        var runningKind = _engine.GetRunningVoicemeeterKind();
-        _voicemeeterKindDetectedFromApi = runningKind != VoicemeeterKind.Unknown;
+        // The canvas layout comes from the ASIO driver banks; there is no VoiceMeeter edition to detect.
         _workspaceSourceKind = savedKind;
-        _kind = _voicemeeterKindDetectedFromApi ? runningKind : savedKind;
+        _kind = savedKind;
         _restoredSavedEditionWorkspace = ActivateVoicemeeterEditionWorkspace(_settings, savedKind, _kind);
         _settings.Kind = _kind;
         _advancedModeActive = _settings.AdvancedModeEnabled;
@@ -2220,18 +1776,9 @@ public partial class MainWindow : Window
         {
             ClearLoadedPluginGraph();
             ApplyLoadedSettings(imported);
-            if (!InsertAsioPatchControlEnabled)
-            {
-                _settings.InsertAsioAutoStart = false;
-                _settings.InsertAsioEndpointKeys?.Clear();
-            }
-
             _savedPluginNodesRestored = false;
             _savedPluginRestoreAttempts = 0;
-            BuildInsertAsioEndpointToggles();
-            SetInsertAsioAutoStartCheckBox(_settings.InsertAsioAutoStart);
-            ApplyInsertAsioPatchAvailability();
-            InsertAsioStatusTextBlock.Text = InsertAsioPatchControlEnabled ? _engine.InsertAsioStatus() : InsertAsioPatchDisabledMessage;
+            UpdateAsioDriverDisplay();
             UpdatePluginFormatButtons();
             PopulatePluginList();
             SelectMode(_selectedMode);
@@ -3247,14 +2794,7 @@ public partial class MainWindow : Window
         {
             if (_settingsByEndpoint.TryGetValue(key, out var settings))
             {
-                if (IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _))
-                {
-                    _engine.ClearChannelSettings(settings.Mode, settings.Endpoint);
-                }
-                else
-                {
-                    _engine.ApplyChannelSettings(settings);
-                }
+                _engine.ApplyChannelSettings(settings);
             }
         }
 
@@ -3267,7 +2807,7 @@ public partial class MainWindow : Window
     {
         if (!_advancedModeActive && mode == CallbackMode.Main)
             mode = CallbackMode.Input;
-        if (IsInsertAsioPatchExclusiveActive() && mode != CallbackMode.Input)
+        if (IsSingleAsioCanvas() && mode != CallbackMode.Input)
         {
             AppendLog($"{(mode == CallbackMode.Output ? "Output" : "Main")} side is unavailable while ASIO Patch is running.");
             _vstCanvasMode = CallbackMode.Input;
@@ -3309,7 +2849,6 @@ public partial class MainWindow : Window
     {
         if (_engine.IsAttached) _audioThreadPriorityDiagnostics.Poll();
         RefreshDspIdentities();
-        TryRegisterVoicemeeterCustomButton();
 
         if (_pluginScanInProgress)
         {
@@ -3328,391 +2867,21 @@ public partial class MainWindow : Window
         {
             var remaining = Math.Max(0, (int)Math.Ceiling((_startupEngineDelayEndsAt - DateTimeOffset.Now).TotalSeconds));
             UpdateHostStatusDisplay($"Startup delay: engine starts in {remaining}s");
-            InsertAsioStatusTextBlock.Text = InsertAsioPatchControlEnabled ? _engine.InsertAsioStatus() : InsertAsioPatchDisabledMessage;
+            AsioLinkStatusTextBlock.Text = _engine.AsioLinkStatus();
             return;
         }
 
-        RefreshVoicemeeterParametersIfNeeded();
-        SyncInsertAsioPatchStateIfNeeded();
-        UpdateInsertAsioRedetectAvailability();
         UpdateHostStatusDisplay();
-        InsertAsioStatusTextBlock.Text = InsertAsioPatchControlEnabled ? _engine.InsertAsioStatus() : InsertAsioPatchDisabledMessage;
-        if (InsertAsioPatchControlEnabled)
-        {
-            MaybeRestartInsertAsioAfterFormatChange();
-        }
-        MonitorRealtimeCallback();
-        var selectedPatchBypassed = _selectedChannelSettings is not null &&
-                                    IsInputPatchBypassEndpoint(
-                                        _selectedChannelSettings.Mode,
-                                        _selectedChannelSettings.Endpoint,
-                                        out _);
-
-        if (_lastSelectedPatchBypassState != selectedPatchBypassed)
-        {
-            var wasInitialized = _lastSelectedPatchBypassState.HasValue;
-            _lastSelectedPatchBypassState = selectedPatchBypassed;
-            RefreshEndpointButtonSelection();
-            if (wasInitialized)
-            {
-                BuildChannelStrips();
-                RebuildRoutingCanvas();
-            }
-        }
+        PollAsioLinkState();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
 
-        _voicemeeterCommandWindow = new WindowInteropHelper(this).Handle;
-        _windowMessageSource = HwndSource.FromHwnd(_voicemeeterCommandWindow);
-        _windowMessageSource?.AddHook(WindowMessageHook);
-        _windowMessageSource?.AddHook(EditorHotkeyMessageHook);
+        _windowHandle = new WindowInteropHelper(this).Handle;
+        HwndSource.FromHwnd(_windowHandle)?.AddHook(EditorHotkeyMessageHook);
         RefreshEditorHotkeys();
-        TryRegisterVoicemeeterCustomButton(force: true);
-    }
-
-    private void TryRegisterVoicemeeterCustomButton(bool force = false)
-    {
-        if (_isShuttingDown ||
-            _voicemeeterCustomButtonRemovalStarted ||
-            _voicemeeterCustomButtonUnavailable ||
-            _voicemeeterCommandWindow == IntPtr.Zero)
-        {
-            return;
-        }
-
-        var now = Environment.TickCount64;
-        if (!_voicemeeterButtonRegistration.ShouldPoll(now, force))
-        {
-            return;
-        }
-
-        if (!_voicemeeterButtonRegistration.ShouldRegister(now, _engine.IsVoicemeeterRemoteReady()))
-        {
-            return;
-        }
-
-        var result = _engine.SetVoicemeeterCustomButton(
-            VoicemeeterCustomButtonIndex,
-            VoicemeeterCustomButtonPushType,
-            0,
-            "FX Host",
-            _voicemeeterCommandWindow,
-            VoicemeeterFxHostCommandId,
-            out var status);
-
-        _voicemeeterButtonRegistration.RecordResult(now, result == 0);
-        if (result == 0)
-        {
-            _lastVoicemeeterCustomButtonFailure = string.Empty;
-            AppendLog("VoiceMeeter custom button registered: FX Host.");
-            return;
-        }
-
-        var failure = string.IsNullOrWhiteSpace(status)
-            ? $"VoiceMeeter custom button registration failed with code {result}."
-            : status.Trim();
-        if (result == -1 &&
-            (failure.Contains("does not expose", StringComparison.OrdinalIgnoreCase) ||
-             failure.Contains("not available", StringComparison.OrdinalIgnoreCase)))
-        {
-            _voicemeeterCustomButtonUnavailable = true;
-        }
-
-        if (!string.Equals(failure, _lastVoicemeeterCustomButtonFailure, StringComparison.Ordinal))
-        {
-            _lastVoicemeeterCustomButtonFailure = failure;
-            AppendLog(failure);
-        }
-    }
-
-    private void RemoveVoicemeeterCustomButton()
-    {
-        if (_voicemeeterCustomButtonRemovalStarted)
-        {
-            return;
-        }
-
-        _voicemeeterCustomButtonRemovalStarted = true;
-        _editorHotkeys?.Dispose();
-        _editorHotkeys = null;
-        _voicemeeterButtonRegistration.Stop();
-        if (_voicemeeterCommandWindow != IntPtr.Zero && _engine.IsAttached)
-        {
-            var result = _engine.SetVoicemeeterCustomButton(
-                VoicemeeterCustomButtonIndex,
-                -1,
-                -1,
-                string.Empty,
-                _voicemeeterCommandWindow,
-                VoicemeeterFxHostCommandId,
-                out var status);
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                RuntimeLog.Write(status);
-            }
-            else
-            {
-                RuntimeLog.Write(
-                    result == 0
-                        ? "VoiceMeeter custom button removed during shutdown."
-                        : $"VoiceMeeter custom button removal failed with code {result}.");
-            }
-        }
-
-        _windowMessageSource?.RemoveHook(WindowMessageHook);
-        _windowMessageSource?.RemoveHook(EditorHotkeyMessageHook);
-        _windowMessageSource = null;
-        _voicemeeterCommandWindow = IntPtr.Zero;
-    }
-
-    private void RefreshVoicemeeterParametersIfNeeded()
-    {
-        var now = DateTimeOffset.Now;
-        if (now - _lastVoicemeeterParameterRefreshAt < VoicemeeterParameterRefreshInterval)
-        {
-            return;
-        }
-
-        _lastVoicemeeterParameterRefreshAt = now;
-        var snapshot = _engine.CallbackSnapshot;
-        if (snapshot.ConnectionState == 3 && snapshot.SampleRate > 0 && snapshot.BlockSize > 0)
-        {
-            return;
-        }
-
-        _engine.RefreshVoicemeeterParameters();
-    }
-
-    private void SyncInsertAsioPatchStateIfNeeded()
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            return;
-        }
-
-        var now = DateTimeOffset.Now;
-        if (now - _lastInsertAsioPatchStateSyncAt < InsertAsioPatchStateSyncInterval)
-        {
-            return;
-        }
-
-        _lastInsertAsioPatchStateSyncAt = now;
-        SyncInsertAsioEndpointKeysFromPatchInsertState(updateToggles: true, queueSave: true);
-    }
-    private void MonitorRealtimeCallback()
-    {
-        if (IsInsertAsioPatchExclusiveActive())
-        {
-            _realtimeCallbackMonitorInitialized = false;
-            _pendingRealtimeFormatRecovery = false;
-            _realtimeCallbackRecoveryAttempts = 0;
-            return;
-        }
-
-        var snapshot = _engine.CallbackSnapshot;
-        var now = DateTimeOffset.Now;
-        if (!snapshot.Attached)
-        {
-            _realtimeCallbackMonitorInitialized = false;
-            return;
-        }
-
-        if (snapshot.ConnectionState != 3)
-        {
-            _realtimeCallbackMonitorInitialized = false;
-            if (HasRealtimeCallbackWork() &&
-                now - _lastRealtimeCallbackRearmAt >= RealtimeCallbackRearmCooldown)
-            {
-                _lastRealtimeCallbackRearmAt = now;
-                var rearmStatus = _engine.RearmRequestedMode();
-                AppendLog($"Realtime callback re-armed after callback state drop: {rearmStatus}");
-            }
-
-            return;
-        }
-
-        if (snapshot.SampleRate <= 0 || snapshot.BlockSize <= 0)
-        {
-            _realtimeCallbackMonitorInitialized = false;
-            return;
-        }
-
-        var bufferCount = snapshot.BufferInCount + snapshot.BufferOutCount + snapshot.BufferMainCount;
-        var callbackActivityCount = bufferCount + snapshot.CommandCount;
-        if (!_realtimeCallbackMonitorInitialized)
-        {
-            _realtimeCallbackMonitorInitialized = true;
-            _lastRealtimeCallbackBufferCount = callbackActivityCount;
-            _lastRealtimeCallbackSampleRate = snapshot.SampleRate;
-            _lastRealtimeCallbackBlockSize = snapshot.BlockSize;
-            _lastRealtimeCallbackActivityAt = now;
-            _lastRealtimeFormatChangeAt = now;
-            return;
-        }
-
-        if (snapshot.SampleRate != _lastRealtimeCallbackSampleRate ||
-            snapshot.BlockSize != _lastRealtimeCallbackBlockSize)
-        {
-            _lastRealtimeCallbackSampleRate = snapshot.SampleRate;
-            _lastRealtimeCallbackBlockSize = snapshot.BlockSize;
-            _lastRealtimeCallbackBufferCount = callbackActivityCount;
-            _lastRealtimeCallbackActivityAt = now;
-            _lastRealtimeFormatChangeAt = now;
-            _realtimeCallbackRecoveryAttempts = 0;
-            _pendingRealtimeFormatRecovery = true;
-            return;
-        }
-
-        if (_pendingRealtimeFormatRecovery &&
-            now - _lastRealtimeFormatChangeAt >= RealtimeCallbackFormatSettleTime &&
-            now - _lastRealtimeFormatRecoveryAt >= RealtimeCallbackRearmCooldown)
-        {
-            _pendingRealtimeFormatRecovery = false;
-            _lastRealtimeFormatRecoveryAt = now;
-            _lastRealtimeCallbackRearmAt = now;
-            _lastRealtimeCallbackActivityAt = now;
-            _lastRealtimeCallbackBufferCount = callbackActivityCount;
-            _realtimeCallbackRecoveryAttempts = 0;
-
-            var prepareResult = _engine.EnsureRealtimePrepared(out var prepareStatus);
-            var rearmStatus = _engine.RearmRequestedMode();
-            var preparePrefix = prepareResult < 0 ? "prepare failed" : "prepare";
-            AppendLog($"Realtime callback recovered after format change ({snapshot.SampleRate} Hz / {snapshot.BlockSize} spl); {preparePrefix}: {prepareStatus}; callback re-arm: {rearmStatus}");
-            _realtimeCallbackMonitorInitialized = false;
-            return;
-        }
-
-        if (callbackActivityCount != _lastRealtimeCallbackBufferCount)
-        {
-            _lastRealtimeCallbackBufferCount = callbackActivityCount;
-            _lastRealtimeCallbackActivityAt = now;
-            _realtimeCallbackRecoveryAttempts = 0;
-            return;
-        }
-
-        if (!HasRealtimeCallbackWork())
-        {
-            return;
-        }
-
-        var staleFor = now - _lastRealtimeCallbackActivityAt;
-        var stableFor = now - _lastRealtimeFormatChangeAt;
-        var cooldownFor = now - _lastRealtimeCallbackRearmAt;
-        var recoveryCooldown = _realtimeCallbackRecoveryAttempts >= 3
-            ? RealtimeCallbackRecoverySlowCooldown
-            : RealtimeCallbackRearmCooldown;
-        if (staleFor < RealtimeCallbackStaleThreshold ||
-            stableFor < RealtimeCallbackFormatSettleTime ||
-            cooldownFor < recoveryCooldown)
-        {
-            return;
-        }
-
-        _lastRealtimeCallbackActivityAt = now;
-        _lastRealtimeCallbackBufferCount = callbackActivityCount;
-        _realtimeCallbackRecoveryAttempts++;
-
-        // Counter staleness is not enough evidence to restart a live audio callback.
-        // Re-arming here caused audible glitches at high sample rates.
-    }
-
-    private bool HasRealtimeCallbackWork() => !IsInsertAsioPatchExclusiveActive() && (_engine.RequestedMode != CallbackMode.None || ComputeActiveCallbackMode() != CallbackMode.None);
-
-    private void ForceDisconnectRealtimeCallbackForInsertAsio(string reason)
-    {
-        var status = _engine.ForceDisconnectRealtimeCallback();
-        _realtimeCallbackMonitorInitialized = false;
-        _pendingRealtimeFormatRecovery = false;
-        _realtimeCallbackRecoveryAttempts = 0;
-        AppendLog($"Realtime callback disconnected for ASIO Patch {reason}: {status}");
-    }
-
-    private void MaybeRestartInsertAsioAfterFormatChange()
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            return;
-        }
-
-        if (_insertAsioFormatRestartInProgress)
-        {
-            return;
-        }
-
-        if (!_engine.IsInsertAsioOpen && !_settings.InsertAsioAutoStart)
-        {
-            return;
-        }
-
-        _insertAsioFormatRestartInProgress = true;
-        try
-        {
-            if (!_engine.IsInsertAsioOpen && _settings.InsertAsioAutoStart)
-            {
-                RestartInsertAsioLikeButtons("closed after format change");
-                return;
-            }
-
-            var result = _engine.RestartInsertAsioIfFormatChanged(_kind, out var restartStatus);
-            if (result == 0)
-            {
-                return;
-            }
-
-            InsertAsioStatusTextBlock.Text = restartStatus;
-            if (result < 0)
-            {
-                AppendLog($"Insert ASIO format monitor restart failed: {restartStatus}");
-                return;
-            }
-
-            AppendLog(restartStatus);
-            if (_engine.IsInsertAsioRunning)
-            {
-                ApplyInsertAsioPatchSelection();
-                RefreshEndpointButtonSelection();
-                _settings.InsertAsioAutoStart = true;
-                SetInsertAsioAutoStartCheckBox(true);
-                QueueSave();
-            }
-
-            RefreshAfterInsertAsioStateChange();
-        }
-        finally
-        {
-            _insertAsioFormatRestartInProgress = false;
-        }
-    }
-
-    private void RestartInsertAsioLikeButtons(string reason)
-    {
-        if (!InsertAsioPatchControlEnabled)
-        {
-            return;
-        }
-
-        ForceDisconnectRealtimeCallbackForInsertAsio($"auto-restart {reason}");
-        var stopStatus = _engine.StopInsertAsio();
-        InsertAsioStatusTextBlock.Text = stopStatus;
-        AppendLog($"Insert ASIO auto-restart ({reason}) stop: {stopStatus}");
-
-        var startStatus = _engine.StartInsertAsio(_kind);
-        InsertAsioStatusTextBlock.Text = startStatus;
-        AppendLog($"Insert ASIO auto-restart ({reason}) start: {startStatus}");
-
-        if (_engine.IsInsertAsioRunning)
-        {
-            ApplyInsertAsioPatchSelection();
-            RefreshEndpointButtonSelection();
-            _settings.InsertAsioAutoStart = true;
-            SetInsertAsioAutoStartCheckBox(true);
-            QueueSave();
-        }
-
-        RefreshAfterInsertAsioStateChange();
     }
 
     private void ShowPluginScanWindow()
@@ -3833,8 +3002,7 @@ public partial class MainWindow : Window
         builder.AppendLine($"Voicemeeter kind: {_kind}");
         builder.AppendLine($"Selected side: {_selectedMode}");
         builder.AppendLine($"Workspace view: {_workspaceView}");
-        builder.AppendLine($"Computed callback mode: {ComputeActiveCallbackMode()}");
-        builder.AppendLine($"Engine requested mode: {_engine.RequestedMode}");
+        builder.AppendLine($"ASIO link: {_engine.AsioLinkStatus()}");
         builder.AppendLine($"Engine status: {_engine.StatusText}");
         builder.AppendLine($"Callback debug: {_engine.CallbackDebugText}");
         builder.AppendLine($"Probe: {_engine.ProbeText}");
@@ -3872,11 +3040,6 @@ public partial class MainWindow : Window
             builder.AppendLine($"  Key: {settings.Key}");
             builder.AppendLine($"  Channel range zero-based: {settings.Endpoint.Range.Start}-{settings.Endpoint.Range.End}");
             builder.AppendLine($"  Channel count: {settings.Endpoint.ChannelCount}");
-            if (IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out var patchExplanation))
-            {
-                builder.AppendLine($"  Input FX unavailable: {patchExplanation}");
-            }
-
             builder.AppendLine($"  Main callback send: {settings.PostInsertSend}");
             builder.AppendLine($"  Pin mode: {settings.PinMode}");
             builder.AppendLine($"  Selected route bus index: {_selectedCrossRouteBusIndex}");
@@ -3924,15 +3087,13 @@ public partial class MainWindow : Window
     private bool HasSelectedMainCallbackRoutes()
     {
         return _selectedChannelSettings is { PostInsertSend: true } settings &&
-               !IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _) &&
-               settings.RouteEnabled.Any(static enabled => enabled);
+                              settings.RouteEnabled.Any(static enabled => enabled);
     }
 
     private bool HasSelectedInputOutputCallbackRoutes()
     {
         return _selectedChannelSettings is { PostInsertSend: false } settings &&
-               !IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _) &&
-               settings.RouteEnabled.Any(static enabled => enabled);
+                              settings.RouteEnabled.Any(static enabled => enabled);
     }
 
     private void SelectWorkspaceView(WorkspaceView view)
@@ -3944,7 +3105,7 @@ public partial class MainWindow : Window
         VstWorkspaceView.Visibility = view == WorkspaceView.Vst ? Visibility.Visible : Visibility.Collapsed;
         SetWorkspaceButtonTone(ChannelsWorkspaceButton, view == WorkspaceView.Channels);
         SetAccentButtonTone(VstWorkspaceButton, view == WorkspaceView.Vst, "VstAccentBrush", "NeutralBrush");
-        if (view == WorkspaceView.Vst && CoerceVstRouteViewForInsertAsio())
+        if (view == WorkspaceView.Vst && CoerceSingleAsioCanvas())
         {
             BuildEndpointButtons();
         }
@@ -3963,10 +3124,10 @@ public partial class MainWindow : Window
     {
         if (!_advancedModeActive && view == VstInputCanvasRouteView.DirectOutput)
             return;
-        if (view == VstInputCanvasRouteView.DirectOutput && IsInsertAsioPatchExclusiveActive())
+        if (view == VstInputCanvasRouteView.DirectOutput && IsSingleAsioCanvas())
         {
-            AppendLog("In -> Out is unavailable while ASIO Patch is running.");
-            CoerceVstRouteViewForInsertAsio();
+            AppendLog("FX Host uses one canvas: FX In -> VST -> FX Out.");
+            CoerceSingleAsioCanvas();
             RefreshVstRouteViewButtons();
             RebuildRoutingCanvas();
             return;
@@ -3993,10 +3154,10 @@ public partial class MainWindow : Window
 
     private void SelectVstOutputCanvasRouteView()
     {
-        if (IsInsertAsioPatchExclusiveActive())
+        if (IsSingleAsioCanvas())
         {
-            AppendLog("Out -> Out is unavailable while ASIO Patch is running.");
-            CoerceVstRouteViewForInsertAsio();
+            AppendLog("FX Host uses one canvas: FX In -> VST -> FX Out.");
+            CoerceSingleAsioCanvas();
             RefreshVstRouteViewButtons();
             RebuildRoutingCanvas();
             return;
@@ -4016,9 +3177,7 @@ public partial class MainWindow : Window
 
     private void RefreshVstRouteViewButtons()
     {
-        var showRouteView = _workspaceView == WorkspaceView.Vst;
-        var insertAsioRouteLock = IsInsertAsioPatchExclusiveActive();
-        VstRouteViewPanel.Visibility = showRouteView ? Visibility.Visible : Visibility.Collapsed;
+        VstRouteViewPanel.Visibility = Visibility.Collapsed; // single FX In -> FX Out canvas
         SetWorkspaceButtonTone(
             VstInputReturnButton,
             _vstCanvasMode == CallbackMode.Input &&
@@ -4029,44 +3188,17 @@ public partial class MainWindow : Window
             _vstInputCanvasRouteView == VstInputCanvasRouteView.DirectOutput);
         SetWorkspaceButtonTone(VstOutputReturnButton, _vstCanvasMode == CallbackMode.Output);
 
-        VstInputReturnButton.IsEnabled = showRouteView;
-        VstInputDirectButton.IsEnabled = _advancedModeActive && showRouteView && !insertAsioRouteLock;
-        VstOutputReturnButton.IsEnabled = showRouteView && !insertAsioRouteLock;
+        VstInputReturnButton.IsEnabled = true;
+        VstInputDirectButton.IsEnabled = false;
+        VstOutputReturnButton.IsEnabled = false;
         VstInputDirectButton.Opacity = VstInputDirectButton.IsEnabled ? 1.0 : 0.45;
         VstOutputReturnButton.Opacity = VstOutputReturnButton.IsEnabled ? 1.0 : 0.45;
 
-        var lockedTip = "Unavailable while ASIO Patch is running. ASIO Patch owns the insert driver and disconnects the normal VoiceMeeter callback routes.";
-        VstInputDirectButton.ToolTip = insertAsioRouteLock ? lockedTip : null;
-        VstOutputReturnButton.ToolTip = insertAsioRouteLock ? lockedTip : null;
-    }
-
-    private bool CoerceVstRouteViewForInsertAsio()
-    {
-        if (!IsInsertAsioPatchExclusiveActive())
-        {
-            return false;
-        }
-
-        if (_vstCanvasMode != CallbackMode.Output &&
-            (_vstCanvasMode != CallbackMode.Input || _vstInputCanvasRouteView != VstInputCanvasRouteView.DirectOutput))
-        {
-            return false;
-        }
-
-        var sideModeChanged = _selectedMode != CallbackMode.Input;
-        _vstCanvasMode = CallbackMode.Input;
-        _vstInputCanvasRouteView = VstInputCanvasRouteView.InputReturn;
-        if (sideModeChanged)
-        {
-            SetSelectedSideMode(CallbackMode.Input);
-        }
-
-        return sideModeChanged;
     }
 
     private void RefreshSideModeButtonAvailability()
     {
-        var insertAsioLocked = IsInsertAsioPatchExclusiveActive();
+        var insertAsioLocked = IsSingleAsioCanvas();
         var lockedTip = "Unavailable while ASIO Patch is running. ASIO Patch uses the input insert path only.";
 
         InputModeButton.IsEnabled = true;
@@ -4150,73 +3282,17 @@ public partial class MainWindow : Window
         };
     }
 
+    // Pushes canvas routing to the engine. Audio itself always arrives through the ASIO link.
     private void RefreshEngineCallbackMode()
     {
         if (_startupEngineDelayActive)
         {
             SyncOutputBoosts(CallbackMode.None);
-            _engine.ForceDisconnectRealtimeCallback();
             return;
         }
 
-        SyncInputCallbackSuppression();
         ApplyVstCanvasPassthroughRoutes();
-
-        if (IsInsertAsioPatchExclusiveActive())
-        {
-            SyncOutputBoosts(CallbackMode.Input);
-            _engine.ForceDisconnectRealtimeCallback();
-            return;
-        }
-
-        var activeMode = ComputeActiveCallbackMode();
-        SyncOutputBoosts(activeMode);
-        _engine.SetRequestedMode(activeMode);
-    }
-
-    private bool IsInsertAsioPatchExclusiveActive() =>
-        InsertAsioPatchControlEnabled && _engine.IsInsertAsioRunning;
-
-    private CallbackMode ComputeActiveCallbackMode()
-    {
-        var active = CallbackMode.None;
-
-        foreach (var settings in _settingsByEndpoint.Values)
-        {
-            if (_advancedModeActive && settings.HasActiveChannels && !IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _))
-            {
-                active |= settings.Mode;
-            }
-        }
-
-        foreach (var node in _settings.PluginNodes.Where(PluginNodeHasCallbackWork))
-        {
-            active |= node.Mode;
-        }
-
-        foreach (var connection in _settings.CanvasConnections.Where(static connection => connection.Kind == ConnectionEndpointToEndpoint))
-        {
-            active |= EndpointToEndpointRouteMode(connection.FromMode, connection.ToMode);
-        }
-
-        foreach (var connection in _settings.CanvasConnections.Where(IsExternalGroupConnection))
-        {
-            active |= connection.FromMode;
-            active |= connection.ToMode;
-        }
-
-        var directRoutes = AllDirectRoutes().ToArray();
-        if (directRoutes.Any(static route => route.Mode == CallbackMode.Input))
-        {
-            active |= CallbackMode.Input | CallbackMode.Output;
-        }
-
-        foreach (var mode in directRoutes.Select(static route => route.Mode).Distinct())
-        {
-            active |= mode;
-        }
-
-        return active & _engine.AllowedCallbackModes;
+        SyncOutputBoosts(CallbackMode.Input);
     }
 
     private bool PluginNodeHasCallbackWork(PluginNodeSnapshot node) =>
@@ -4241,14 +3317,12 @@ public partial class MainWindow : Window
         {
             var key = endpoint.Key(endpointMode);
             var selected = endpoint == endpointToSelect;
-            var patchBypassed = IsInputPatchBypassEndpoint(endpointMode, endpoint, out var patchExplanation);
-            var active = !patchBypassed &&
-                         _settingsByEndpoint.TryGetValue(key, out var settings) &&
+            var active = _settingsByEndpoint.TryGetValue(key, out var settings) &&
                          settings.HasActiveChannels;
             var hueStroke = EndpointHueStrokeBrush(key);
             var button = new Button
             {
-                Content = patchBypassed ? $"{endpoint.DisplayName}  bus only" : endpoint.DisplayName,
+                Content = endpoint.DisplayName,
                 Tag = key,
                 Margin = new Thickness(0, 0, 8, 8),
                 MinWidth = 104,
@@ -4262,9 +3336,7 @@ public partial class MainWindow : Window
                     : (Brush)FindResource("TextBrush"),
                 BorderBrush = hueStroke ?? (Brush)FindResource("StrokeBrush"),
                 BorderThickness = hueStroke is null ? new Thickness(1) : new Thickness(2),
-                ContextMenu = BuildEndpointContextMenu(endpointMode, endpoint),
-                Opacity = patchBypassed ? 0.54 : 1.0,
-                ToolTip = patchBypassed ? patchExplanation : null
+                ContextMenu = BuildEndpointContextMenu(endpointMode, endpoint)
             };
             button.Click += (_, _) => SelectEndpoint(endpointMode, endpoint);
             EndpointButtonsPanel.Children.Add(button);
@@ -4305,37 +3377,6 @@ public partial class MainWindow : Window
         _settings.SelectedEndpointName = endpoint.Name;
     }
 
-    private bool IsInputPatchBypassEndpoint(CallbackMode mode, IoEndpoint endpoint, out string explanation)
-    {
-        explanation = string.Empty;
-        if (!InsertAsioPatchControlEnabled || mode != CallbackMode.Input || endpoint is null || _engine.IsInsertAsioRunning)
-        {
-            return false;
-        }
-
-        var liveState = PatchInsertStateForEndpoint(endpoint);
-        if (liveState == true)
-        {
-            explanation = $"{endpoint.Name} has VoiceMeeter Patch.insert enabled while ASIO Patch is stopped. Uncheck this input in ASIO Patch or VoiceMeeter System Settings to return it to the normal callback path.";
-            return true;
-        }
-
-        if (liveState is null)
-        {
-            explanation = $"{endpoint.Name} has a mixed VoiceMeeter Patch.insert state while ASIO Patch is stopped. Clear the insert toggles for this input to return every channel to the normal callback path.";
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool IsInputPatchBypassChannel(CallbackMode mode, int channel, out string explanation)
-    {
-        explanation = string.Empty;
-        var endpoint = EndpointForChannel(mode, channel);
-        return endpoint is not null && IsInputPatchBypassEndpoint(mode, endpoint, out explanation);
-    }
-
     private void SelectEndpoint(CallbackMode endpointMode, IoEndpoint endpoint)
     {
         _selectedEndpoint = endpoint;
@@ -4343,7 +3384,6 @@ public partial class MainWindow : Window
         _selectedChannelSettings = GetOrCreateChannelSettings(endpointMode, endpoint);
         _selectedCrossRouteBusIndex = -1;
         _expandedCrossRouteBusIndex = -1;
-        _lastSelectedPatchBypassState = null;
         RefreshEndpointButtonSelection();
         BuildChannelStrips();
         RefreshEngineCallbackMode();
@@ -4368,11 +3408,8 @@ private void RefreshEndpointButtonSelection()
             var selected = key == selectedKey;
             var endpoint = EndpointForKey(key);
             var mode = EndpointModeForCurrentSide();
-            var patchExplanation = string.Empty;
-            var patchBypassed = endpoint is not null && IsInputPatchBypassEndpoint(mode, endpoint, out patchExplanation);
             var active = key is not null &&
                          _settingsByEndpoint.TryGetValue(key, out var settings) &&
-                         !patchBypassed &&
                          settings.HasActiveChannels;
             var hueStroke = key is null ? null : EndpointHueStrokeBrush(key);
             child.Background = active
@@ -4385,11 +3422,9 @@ private void RefreshEndpointButtonSelection()
                 : (Brush)FindResource("TextBrush");
             child.BorderBrush = hueStroke ?? (Brush)FindResource("StrokeBrush");
             child.BorderThickness = hueStroke is null ? new Thickness(1) : new Thickness(2);
-            child.Opacity = patchBypassed ? 0.54 : 1.0;
-            child.ToolTip = patchBypassed ? patchExplanation : null;
             if (endpoint is not null)
             {
-                child.Content = patchBypassed ? $"{endpoint.DisplayName}  bus only" : endpoint.DisplayName;
+                child.Content = endpoint.DisplayName;
             }
         }
     }
@@ -4402,17 +3437,6 @@ private void RefreshEndpointButtonSelection()
         menu.Items.Add(CreateNodeMenuItem("Hotkey", () => ShowEditorHotkeys(this, selectedEndpoint: hotkeyTarget)));
         menu.Items.Add(CreateNodeMenuItem("Select Section", () => SelectCanvasEndpoint(mode, endpoint)));
         menu.Items.Add(new Separator());
-        var patchBypassed = IsInputPatchBypassEndpoint(mode, endpoint, out var patchExplanation);
-        if (patchBypassed)
-        {
-            menu.Items.Add(new MenuItem
-            {
-                Header = "Input FX unavailable: patch/bus path",
-                IsEnabled = false,
-                ToolTip = patchExplanation
-            });
-            menu.Items.Add(new Separator());
-        }
 
         if (CanChangeEndpointPinMode(endpoint))
         {
@@ -4420,13 +3444,11 @@ private void RefreshEndpointButtonSelection()
             var minimize = CreateNodeMenuItem("Minimize Pins", () => SetEndpointPinMode(mode, endpoint, EndpointPinMode.Stereo));
             minimize.IsCheckable = true;
             minimize.IsChecked = currentMode == EndpointPinMode.Stereo;
-            minimize.IsEnabled = !patchBypassed;
             menu.Items.Add(minimize);
 
             var expand = CreateNodeMenuItem($"Expand Pins ({endpoint.ChannelCount})", () => SetEndpointPinMode(mode, endpoint, EndpointPinMode.Full));
             expand.IsCheckable = true;
             expand.IsChecked = currentMode == EndpointPinMode.Full;
-            expand.IsEnabled = !patchBypassed;
             menu.Items.Add(expand);
             menu.Items.Add(new Separator());
         }
@@ -4570,12 +3592,6 @@ private void RefreshEndpointButtonSelection()
         if (!CanChangeEndpointPinMode(endpoint))
         {
             pinMode = EndpointPinMode.Stereo;
-        }
-
-        if (IsInputPatchBypassEndpoint(mode, endpoint, out var explanation))
-        {
-            AppendLog(explanation);
-            return;
         }
 
         var settings = GetOrCreateChannelSettings(mode, endpoint);
@@ -4787,15 +3803,6 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        if (IsInputPatchBypassEndpoint(_selectedChannelSettings.Mode, _selectedChannelSettings.Endpoint, out var explanation))
-        {
-            ChannelStripTitleTextBlock.Text = $"{_selectedChannelSettings.Endpoint.Name} input FX unavailable";
-            ChannelStripPanel.Children.Add(CreatePatchBypassNotice(explanation));
-            BuildCrossRoutingPanel();
-            ApplyEngineState();
-            return;
-        }
-
         ChannelStripTitleTextBlock.Text = CurrentChannelStripTitle(_selectedChannelSettings);
         var selectedBusIndex = SelectedCrossRouteBusIndex(_selectedChannelSettings);
         var outputBuses = selectedBusIndex >= 0
@@ -4826,45 +3833,6 @@ private void RefreshEndpointButtonSelection()
 
         BuildCrossRoutingPanel();
         ApplyEngineState();
-    }
-
-    private UIElement CreatePatchBypassNotice(string explanation)
-    {
-        var border = new Border
-        {
-            Width = 560,
-            MinHeight = 120,
-            Margin = new Thickness(0, 0, 10, 0),
-            Background = (Brush)FindResource("PanelBrush"),
-            BorderBrush = (Brush)FindResource("SubtleBorderBrush"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(14)
-        };
-
-        var stack = new StackPanel();
-        border.Child = stack;
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Bus-only source",
-            FontWeight = FontWeights.SemiBold,
-            Foreground = (Brush)FindResource("RouteAccentBrush")
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = explanation,
-            Style = (Style)FindResource("MutedText"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 8, 0, 0)
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Use Output/Bus FX for this source, or turn off the VoiceMeeter patch path to use Input FX.",
-            Foreground = (Brush)FindResource("VolumeAccentBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 8, 0, 0)
-        });
-        return border;
     }
 
     private string CurrentChannelStripTitle(EndpointChannelSettings settings)
@@ -5744,13 +4712,6 @@ private void RefreshEndpointButtonSelection()
                 ? "Output Channels"
                 : "Channels";
             DrawCrossRouteEmptyState("Cross routing is available from the Input side.");
-            return;
-        }
-
-        if (IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out var patchExplanation))
-        {
-            RoutingCanvasTitleTextBlock.Text = $"{settings.Endpoint.Name} bus-only source";
-            DrawCrossRouteEmptyState(patchExplanation);
             return;
         }
 
@@ -8289,14 +7250,7 @@ private void RefreshEndpointButtonSelection()
 
     private void DrawCanvasCards()
     {
-        RoutingCanvasTitleTextBlock.Text = _vstCanvasMode switch
-        {
-            CallbackMode.Output => "Output VST Canvas",
-            CallbackMode.Main => "Main Routing Canvas",
-            _ => IsInputDirectOutputVstView()
-                ? "Input -> Output VST Canvas"
-                : "Input -> Input VST Canvas"
-        };
+        RoutingCanvasTitleTextBlock.Text = "FX In -> VST -> FX Out";
 
         var leftMode = CanvasEndpointMode(outputSide: false);
         var rightMode = CanvasEndpointMode(outputSide: true);
@@ -8391,9 +7345,7 @@ private void RefreshEndpointButtonSelection()
 
     private double VstEndpointCardHeight(CallbackMode mode, IoEndpoint endpoint, int pinCount)
     {
-        return IsInputPatchBypassEndpoint(mode, endpoint, out _)
-            ? 88.0
-            : VstEndpointCardHeightForPinCount(pinCount);
+        return VstEndpointCardHeightForPinCount(pinCount);
     }
 
     private static double VstEndpointCardHeightForPinCount(int pinCount) =>
@@ -8549,7 +7501,6 @@ private void RefreshEndpointButtonSelection()
         CanvasEndpointMode(outputSide) == mode;
     private void DrawEndpointCard(IoEndpoint endpoint, CallbackMode mode, double x, double y, bool outputSide, int pinCount)
     {
-        var patchBypassed = IsInputPatchBypassEndpoint(mode, endpoint, out var patchExplanation);
         var height = VstEndpointCardHeight(mode, endpoint, pinCount);
         var endpointMenu = BuildEndpointContextMenu(mode, endpoint, outputSide);
         var endpointKey = endpoint.Key(mode);
@@ -8567,22 +7518,16 @@ private void RefreshEndpointButtonSelection()
         {
             Width = VstEndpointCardWidth,
             Height = height,
-            Background = patchBypassed
-                ? (Brush)FindResource("NeutralBrush")
-                : hueFill ?? (Brush)FindResource("PanelBrush"),
+            Background = hueFill ?? (Brush)FindResource("PanelBrush"),
             BorderBrush = quickGroupEndpointSelected
                 ? (Brush)FindResource("VolumeAccentBrush")
-                : patchBypassed
-                    ? (Brush)FindResource("SubtleBorderBrush")
-                    : hueStroke ?? (Brush)FindResource("SubtleBorderBrush"),
+                : hueStroke ?? (Brush)FindResource("SubtleBorderBrush"),
             BorderThickness = quickGroupEndpointSelected
                 ? new Thickness(2)
                 : hueStroke is null ? new Thickness(1) : new Thickness(2),
             CornerRadius = new CornerRadius(6),
             ContextMenu = endpointMenu,
-            Tag = new EndpointDragInfo(mode, endpoint, outputSide),
-            Opacity = patchBypassed ? 0.50 : 1.0,
-            ToolTip = patchBypassed ? patchExplanation : null
+            Tag = new EndpointDragInfo(mode, endpoint, outputSide)
         };
         Canvas.SetLeft(border, x);
         Canvas.SetTop(border, y);
@@ -8605,54 +7550,24 @@ private void RefreshEndpointButtonSelection()
 
         var textLeft = outputSide ? 0 : 8;
         var textRight = outputSide ? 0 : 8;
-        if (!patchBypassed)
-        {
-            if (outputSide) textLeft += 16;
-            else textRight += 14;
-        }
+        if (outputSide) textLeft += 16;
+        else textRight += 14;
         var textPaddingRight = outputSide ? 12 : 0;
         var textAlignment = outputSide ? TextAlignment.Right : TextAlignment.Left;
         var textWidth = Math.Max(42.0, VstEndpointCardWidth - textLeft - textRight);
         var endpointStack = new StackPanel();
-        var endpointTitle = EndpointCardTitle(endpoint, pinCount);
+        var endpointTitle = EndpointCardTitle(endpoint with { Name = FxHostEdition.SideName(endpoint.Name, outputSide) }, pinCount);
         endpointTitle.Margin = new Thickness(textLeft, 6, textRight, 0);
         endpointTitle.Width = textWidth;
         endpointTitle.Padding = new Thickness(0, 0, textPaddingRight, 0);
         endpointTitle.TextAlignment = textAlignment;
         endpointStack.Children.Add(endpointTitle);
-        if (outputSide && !patchBypassed && EndpointOutputBoostStream(mode) >= 0)
+        if (outputSide && EndpointOutputBoostStream(mode) >= 0)
         {
             endpointTitle.Margin = new Thickness(textLeft, 2, textRight, 0);
             DrawOutputBoostBadge(endpoint, mode, x, y, hueStroke, endpointElements);
         }
-        if (patchBypassed) endpointStack.Children.Add(new TextBlock
-        {
-            Text = "Bus only",
-            Style = (Style)FindResource("MutedText"),
-            FontSize = 11,
-            Margin = new Thickness(textLeft, 2, textRight, 0),
-            Width = textWidth,
-            Padding = new Thickness(0, 0, textPaddingRight, 0),
-            TextAlignment = textAlignment,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
         border.Child = endpointStack;
-        if (patchBypassed)
-        {
-            endpointStack.Children.Add(new TextBlock
-            {
-                Text = "Use Output FX",
-                Foreground = (Brush)FindResource("RouteAccentBrush"),
-                FontSize = 11,
-                Margin = new Thickness(textLeft, 8, textRight, 0),
-                Width = textWidth,
-                Padding = new Thickness(0, 0, textPaddingRight, 0),
-                TextAlignment = textAlignment,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            });
-            return;
-        }
-
         for (var offset = 0; offset < pinCount; offset++)
         {
             var pinY = VstCardPinY(y, offset);
@@ -8665,7 +7580,7 @@ private void RefreshEndpointButtonSelection()
                 Channel = channel,
                 Pin = offset,
                 Point = new Point(pinX, pinY),
-                Label = $"{endpoint.Name} {EndpointPinLabel(pinCount, offset)}"
+                Label = $"{FxHostEdition.SideName(endpoint.Name, outputSide)} {EndpointPinLabel(pinCount, offset)}"
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
 
@@ -11030,13 +9945,6 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        if (IsInputPatchBypassChannel(pinInfo.Mode, pinInfo.Channel, out var explanation))
-        {
-            AppendLog(explanation);
-            e.Handled = true;
-            return;
-        }
-
         _wireDragStart = pinInfo;
         UpdateWirePreview(pinInfo.Point);
         e.Handled = true;
@@ -11101,18 +10009,6 @@ private void RefreshEndpointButtonSelection()
 
         if (source is null || PinPositionKey(source) == PinPositionKey(target))
         {
-            return;
-        }
-
-        if (IsInputPatchBypassChannel(source.Mode, source.Channel, out var sourceExplanation))
-        {
-            AppendLog(sourceExplanation);
-            return;
-        }
-
-        if (IsInputPatchBypassChannel(target.Mode, target.Channel, out var targetExplanation))
-        {
-            AppendLog(targetExplanation);
             return;
         }
 
@@ -11763,11 +10659,6 @@ private void RefreshEndpointButtonSelection()
         {
             if (connection.Kind == ConnectionEndpointToNode && connection.ToSlot == slot)
             {
-                if (IsInputPatchBypassChannel(connection.FromMode, connection.FromChannel, out _))
-                {
-                    continue;
-                }
-
                 if (targetNode is not null && IsSidechainVisualInputPin(targetNode, connection.ToPin))
                 {
                     continue;
@@ -12587,7 +11478,6 @@ private void RefreshEndpointButtonSelection()
         if (!_advancedModeActive)
             return [];
         return _settingsByEndpoint.Values
-            .Where(settings => !IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _))
             .SelectMany(settings => settings.ToDirectRoutes(_kind));
     }
 
@@ -12606,12 +11496,6 @@ private void RefreshEndpointButtonSelection()
                     }
 
                     if (connection.FromChannel < 0 || connection.ToChannel < 0)
-                    {
-                        continue;
-                    }
-
-                    if (IsInputPatchBypassChannel(connection.FromMode, connection.FromChannel, out _) ||
-                        IsInputPatchBypassChannel(connection.ToMode, connection.ToChannel, out _))
                     {
                         continue;
                     }
@@ -12637,11 +11521,6 @@ private void RefreshEndpointButtonSelection()
                         continue;
                     }
 
-                    if (IsInputPatchBypassChannel(connection.FromMode, connection.FromChannel, out _))
-                    {
-                        continue;
-                    }
-
                     yield return new PluginPassthroughRouteSummary(
                         mode,
                         connection.FromChannel,
@@ -12659,11 +11538,6 @@ private void RefreshEndpointButtonSelection()
                     }
 
                     if (!IsValidGroupOutputPin(connection.FromGroupId, connection.FromPin))
-                    {
-                        continue;
-                    }
-
-                    if (IsInputPatchBypassChannel(connection.ToMode, connection.ToChannel, out _))
                     {
                         continue;
                     }
@@ -13298,18 +12172,6 @@ private void RefreshEndpointButtonSelection()
                 {
                     var sourceChannel = source.Endpoint.Range.Start + pin;
                     var destinationChannel = destination.Endpoint.Range.Start + pin;
-                    if (IsInputPatchBypassChannel(source.Mode, sourceChannel, out var sourceExplanation))
-                    {
-                        AppendLog(sourceExplanation);
-                        continue;
-                    }
-
-                    if (IsInputPatchBypassChannel(destination.Mode, destinationChannel, out var destinationExplanation))
-                    {
-                        AppendLog(destinationExplanation);
-                        continue;
-                    }
-
                     if (FindEndpointToEndpointConnection(source.Mode, destination.Mode, sourceChannel, destinationChannel) is not null)
                     {
                         continue;
@@ -13445,12 +12307,6 @@ private void RefreshEndpointButtonSelection()
             for (var pin = 0; pin < pinCount; pin++)
             {
                 var channel = source.Endpoint.Range.Start + pin;
-                if (IsInputPatchBypassChannel(source.Mode, channel, out var explanation))
-                {
-                    AppendLog(explanation);
-                    continue;
-                }
-
                 var visualPin = node.SidechainInputPins + pin;
                 if (NativeInputPinForVisualPin(node, visualPin) < 0)
                 {
@@ -13491,12 +12347,6 @@ private void RefreshEndpointButtonSelection()
             for (var pin = 0; pin < pinCount; pin++)
             {
                 var channel = destination.Endpoint.Range.Start + pin;
-                if (IsInputPatchBypassChannel(destination.Mode, channel, out var explanation))
-                {
-                    AppendLog(explanation);
-                    continue;
-                }
-
                 if (FindNodeToEndpointConnection(node.Slot, pin, destination.Mode, channel) is null)
                 {
                     _settings.CanvasConnections.Add(new CanvasConnectionSnapshot
@@ -13683,12 +12533,6 @@ private void RefreshEndpointButtonSelection()
         for (var pin = 0; pin < pinCount; pin++)
         {
             var channel = source.Endpoint.Range.Start + pin;
-            if (IsInputPatchBypassChannel(source.Mode, channel, out var explanation))
-            {
-                AppendLog(explanation);
-                continue;
-            }
-
             var connection = new CanvasConnectionSnapshot
             {
                 Kind = ConnectionEndpointToGroupInput,
@@ -13723,12 +12567,6 @@ private void RefreshEndpointButtonSelection()
         for (var pin = 0; pin < pinCount; pin++)
         {
             var channel = destination.Endpoint.Range.Start + pin;
-            if (IsInputPatchBypassChannel(destination.Mode, channel, out var explanation))
-            {
-                AppendLog(explanation);
-                continue;
-            }
-
             var connection = new CanvasConnectionSnapshot
             {
                 Kind = ConnectionGroupOutputToEndpoint,
@@ -13899,14 +12737,7 @@ private void RefreshEndpointButtonSelection()
 
         foreach (var settings in _settingsByEndpoint.Values)
         {
-            if (IsInputPatchBypassEndpoint(settings.Mode, settings.Endpoint, out _))
-            {
-                _engine.ClearChannelSettings(settings.Mode, settings.Endpoint);
-            }
-            else
-            {
-                _engine.ApplyChannelSettings(settings);
-            }
+            _engine.ApplyChannelSettings(settings);
         }
 
         var routes = AllDirectRoutes().ToArray();
@@ -13954,7 +12785,6 @@ private void RefreshEndpointButtonSelection()
         }
 
         _isShuttingDown = true;
-        RemoveVoicemeeterCustomButton();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -13966,7 +12796,6 @@ private void RefreshEndpointButtonSelection()
         _isShuttingDown = true;
         _updateLifetime.Cancel();
         _updateLifetime.Dispose();
-        RemoveVoicemeeterCustomButton();
         FlushQueuedChannelChanges();
         _channelApplyTimer.Stop();
         _pluginRestoreTimer.Stop();

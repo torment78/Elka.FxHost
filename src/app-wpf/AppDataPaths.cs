@@ -5,7 +5,7 @@ namespace Elka.VoiceMeeterFxHost.App;
 internal static class AppDataPaths
 {
     private const string CompanyFolder = "ElkaSoft";
-    private const string AppFolder = "VoiceMeeterFxHost";
+    private const string AppFolder = "FxHost";
 
     public static string RoamingRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -19,5 +19,5 @@ internal static class AppDataPaths
 
     public static string LegacyLocalRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ElkaVoiceMeeterFxHost");
+        CompanyFolder, AppFolder); // no legacy VoiceMeeter FX Host data is imported
 }

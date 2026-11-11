@@ -28,7 +28,7 @@
     <NativeBuildPreset Condition="'$(NativeBuildPreset)' == '' and '$(NativeBuildConfiguration)' == 'Release'">release-vs2026</NativeBuildPreset>
     <NativeBuildPreset Condition="'$(NativeBuildPreset)' == ''">debug-vs2026</NativeBuildPreset>
     <NativeBridgePath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaVoiceMeeterFxHost.Native.dll</NativeBridgePath>
-    <RealtimeCoreBridgePath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaVoiceMeeterFxHost.RealtimeCore.dll</RealtimeCoreBridgePath>
+    <AsioDriverPath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaFxHost.Asio.dll</AsioDriverPath>
     <Vst2SdkPath Condition="'$(Vst2SdkPath)' == '' and '$(ELKA_VST2_SDK_PATH)' != ''">$(ELKA_VST2_SDK_PATH)</Vst2SdkPath>
     <Vst2SdkPath Condition="'$(Vst2SdkPath)' == '' and Exists('$(RepoRoot)\external\VST2_SDK\pluginterfaces\vst2.x\aeffect.h') and Exists('$(RepoRoot)\external\VST2_SDK\pluginterfaces\vst2.x\aeffectx.h')">$(RepoRoot)\external\VST2_SDK</Vst2SdkPath>
     <NativeVst2ConfigureArg>-DELKA_VST2_SDK_PATH=&quot;$(Vst2SdkPath)&quot;</NativeVst2ConfigureArg>
@@ -80,21 +80,21 @@
            Text="VST2 hosting is required, but Vst2SdkPath='$(Vst2SdkPath)' does not contain pluginterfaces\vst2.x\aeffect.h and aeffectx.h." />
   </Target>
   <Target Name="BuildNativeBridge" BeforeTargets="PrepareResources" DependsOnTargets="ValidateVst2SdkPath" Condition="'$(UsePrebuiltSignedPayloads)' != 'true'">
-    <Message Importance="high" Text="Configuring native VoiceMeeter bridge: $(NativeVst2ConfigureArg)" />
+    <Message Importance="high" Text="Configuring native FX Host engine: $(NativeVst2ConfigureArg)" />
     <Exec Command="&quot;$(CMakeExe)&quot; --preset $(NativeCMakePreset) $(NativeVst2ConfigureArg)"
           WorkingDirectory="$(RepoRoot)" />
-    <Message Importance="high" Text="Building native VoiceMeeter bridge: $(NativeBuildPreset)" />
+    <Message Importance="high" Text="Building native FX Host engine: $(NativeBuildPreset)" />
     <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaVoiceMeeterFxHost.Native"
           WorkingDirectory="$(RepoRoot)" />
-    <Message Importance="high" Text="Building realtime core bridge: $(NativeBuildPreset)" />
-    <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaVoiceMeeterFxHost.RealtimeCore"
+    <Message Importance="high" Text="Building Elka FX Host ASIO driver and loopback tool: $(NativeBuildPreset)" />
+    <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaFxHost.Asio MatrixLinkLoopback"
           WorkingDirectory="$(RepoRoot)" />
   </Target>
   <Target Name="CopyNativeBridge" AfterTargets="BuildNativeBridge" Condition="'$(PublishSingleFile)' != 'true'">
-    <Copy SourceFiles="$(NativeBridgePath)"
+    <Copy SourceFiles="$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaFxHost.Asio.dll;$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\MatrixLinkLoopback.exe"
           DestinationFolder="$(OutDir)"
           SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(RealtimeCoreBridgePath)"
+    <Copy SourceFiles="$(NativeBridgePath)"
           DestinationFolder="$(OutDir)"
           SkipUnchangedFiles="true" />
   </Target>
@@ -117,7 +117,7 @@
           SkipUnchangedFiles="true" />
   </Target>
   <Target Name="ValidatePrebuiltSignedPayloads" BeforeTargets="PrepareResources;ComputeFilesToPublish" Condition="'$(UsePrebuiltSignedPayloads)' == 'true'">
-    <Error Condition="!Exists('$(NativeBridgePath)') or !Exists('$(RealtimeCoreBridgePath)') or !Exists('$(PluginWorkerOutputDir)Elka.PluginWorker.exe')"
+    <Error Condition="!Exists('$(NativeBridgePath)') or !Exists('$(AsioDriverPath)') or !Exists('$(PluginWorkerOutputDir)Elka.PluginWorker.exe')"
            Text="Signed-payload packaging requires the prebuilt native libraries and plugin worker. Build and verify them before packaging." />
   </Target>
   <Target Name="AddNativeBridgeToPublish" BeforeTargets="ComputeFilesToPublish;_ComputeFilesToBundle" DependsOnTargets="BuildNativeBridge">
@@ -127,8 +127,8 @@
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
       </ResolvedFileToPublish>
-      <ResolvedFileToPublish Include="$(RealtimeCoreBridgePath)" Condition="Exists('$(RealtimeCoreBridgePath)')">
-        <RelativePath>ElkaVoiceMeeterFxHost.RealtimeCore.dll</RelativePath>
+      <ResolvedFileToPublish Include="$(AsioDriverPath)" Condition="Exists('$(AsioDriverPath)')">
+        <RelativePath>ElkaFxHost.Asio.dll</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
       </ResolvedFileToPublish>

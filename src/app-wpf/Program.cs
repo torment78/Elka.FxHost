@@ -55,8 +55,8 @@ internal static class Program
 
 internal sealed class SingleInstanceCoordinator : IDisposable
 {
-    private const string MutexName = @"Local\ElkaSoft.VoiceMeeterFxHost.SingleInstance";
-    private const string ActivationEventName = @"Local\ElkaSoft.VoiceMeeterFxHost.Activate";
+    private const string MutexName = @"Local\ElkaSoft.FxHost.SingleInstance";
+    private const string ActivationEventName = @"Local\ElkaSoft.FxHost.Activate";
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activationEvent;

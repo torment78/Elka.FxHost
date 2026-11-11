@@ -2,17 +2,13 @@ cmake_minimum_required(VERSION 3.24)
 
 project(ElkaVoiceMeeterFxHost
     VERSION 0.7.6.3
-    DESCRIPTION "VoiceMeeter callback-based FX host prototype"
+    DESCRIPTION "Elka FX Host: VST host behind its own virtual ASIO driver"
     LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(ELKA_BUILD_CALLBACK_NULL_HOST "Build standalone VoiceMeeter callback null-host diagnostic tool" ON)
-if (ELKA_BUILD_CALLBACK_NULL_HOST AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/CallbackNullHost/CMakeLists.txt")
-    add_subdirectory(tools/CallbackNullHost)
-endif()
 set(ELKA_JUCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/JUCE")
 set(ELKA_VST2_SDK_PATH "" CACHE PATH "Required legacy VST2 SDK folder containing pluginterfaces/vst2.x/aeffect.h and aeffectx.h")
 set(ELKA_ENABLE_VST2_HOST OFF)
@@ -45,15 +41,13 @@ else()
 endif()
 
 set(ELKA_REALTIME_CALLBACK_SOURCES
-    src/voicemeeter/VoicemeeterRemoteApi.cpp
-    src/voicemeeter/VoicemeeterClient.cpp
     src/engine/RealtimeEngine.cpp
     src/engine/AudioThreadPriority.cpp
 )
 
 set(ELKA_NATIVE_CORE_SOURCES
     ${ELKA_REALTIME_CALLBACK_SOURCES}
-    src/insert_asio/InsertAsioHost.cpp
+    src/matrix_link/MatrixLinkHost.cpp
     src/plugins/PluginHostLayer.cpp
 )
 
@@ -62,18 +56,13 @@ add_library(ElkaVoiceMeeterFxHost.Native SHARED
     ${ELKA_NATIVE_CORE_SOURCES}
 )
 
-add_library(ElkaVoiceMeeterFxHost.RealtimeCore SHARED
-    src/realtime_core_api/RealtimeCoreNativeApi.cpp
-    ${ELKA_REALTIME_CALLBACK_SOURCES}
-)
-
 # The helper hosts the existing native plugin layer directly, with no CLR or P/Invoke.
 add_executable(Elka.PluginWorker WIN32
     src/plugin-worker/NativeWorker.cpp
     src/plugins/PluginHostLayer.cpp
 )
 
-foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native ElkaVoiceMeeterFxHost.RealtimeCore Elka.PluginWorker)
+foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
     target_include_directories(${target} PRIVATE
         src
     )
@@ -107,10 +96,6 @@ target_compile_definitions(ElkaVoiceMeeterFxHost.Native PRIVATE
     ELKA_VOICEMEETER_FX_HOST_NATIVE_EXPORTS=1
 )
 
-target_compile_definitions(ElkaVoiceMeeterFxHost.RealtimeCore PRIVATE
-    ELKA_VOICEMEETER_FX_HOST_REALTIME_CORE_EXPORTS=1
-)
-
 if (ELKA_ENABLE_JUCE_PLUGIN_HOST)
     foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
         target_compile_definitions(${target} PRIVATE
@@ -141,7 +126,7 @@ else()
 endif()
 
 if (MSVC)
-    foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native ElkaVoiceMeeterFxHost.RealtimeCore Elka.PluginWorker)
+    foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
         target_compile_options(${target} PRIVATE
             /W4
             /permissive-
@@ -198,13 +183,29 @@ include(tests/PluginFailureChecks/CMakeLists.txt)
 include(tests/PluginCapacityChecks/CMakeLists.txt)
 include(tests/SandboxPoolChecks/CMakeLists.txt)
 
-add_executable(InsertAsioChecks EXCLUDE_FROM_ALL tests/InsertAsioChecks/main.cpp
-    src/insert_asio/InsertAsioHost.cpp src/engine/RealtimeEngine.cpp src/engine/AudioThreadPriority.cpp)
-target_include_directories(InsertAsioChecks PRIVATE src)
-target_compile_definitions(InsertAsioChecks PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
-    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_ASIO=1 JUCE_ASIO_USE_EXTERNAL_SDK=0)
-target_link_libraries(InsertAsioChecks PRIVATE juce::juce_audio_devices Avrt)
-
 add_library(NativeWorkerProbeVst MODULE EXCLUDE_FROM_ALL tests/NativeWorkerChecks/ProbeVst.cpp)
 target_include_directories(NativeWorkerProbeVst PRIVATE "${ELKA_VST2_SDK_PATH}")
 target_link_libraries(NativeWorkerProbeVst PRIVATE User32)
+
+# ---------------------------------------------------------------------------------
+# Elka FX Host virtual ASIO driver. Loaded by Matrix (or any ASIO host) in its own
+# process; talks to the FX Host app through src/matrix_link/MatrixLinkProtocol.h.
+# Static CRT so it never depends on the host process having our runtime.
+add_library(ElkaFxHost.Asio SHARED
+    src/asio_driver/ElkaAsioDriver.cpp
+    src/asio_driver/ElkaFxHost.Asio.def
+)
+target_include_directories(ElkaFxHost.Asio PRIVATE src "${ELKA_JUCE_DIR}/modules")
+target_compile_definitions(ElkaFxHost.Asio PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(ElkaFxHost.Asio PRIVATE Advapi32 Avrt Ole32 User32 Winmm)
+set_property(TARGET ElkaFxHost.Asio PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+if (MSVC)
+    target_compile_options(ElkaFxHost.Asio PRIVATE /W4 /permissive- /EHsc)
+endif()
+
+# Stand-in for Matrix: loads the driver DLL directly and loops a tone through FX In/Out.
+add_executable(MatrixLinkLoopback tools/MatrixLinkLoopback/main.cpp)
+target_include_directories(MatrixLinkLoopback PRIVATE src "${ELKA_JUCE_DIR}/modules")
+target_compile_definitions(MatrixLinkLoopback PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(MatrixLinkLoopback PRIVATE Ole32 User32)
+add_dependencies(MatrixLinkLoopback ElkaFxHost.Asio)

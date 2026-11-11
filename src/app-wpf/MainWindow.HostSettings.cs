@@ -14,8 +14,8 @@ public partial class MainWindow
 
     private void RefreshEditorHotkeys()
     {
-        if (_isShuttingDown || _voicemeeterCommandWindow == IntPtr.Zero || _editorHotkeysWindow is not null) return;
-        _editorHotkeys ??= new GlobalEditorHotkeys(_voicemeeterCommandWindow);
+        if (_isShuttingDown || _windowHandle == IntPtr.Zero || _editorHotkeysWindow is not null) return;
+        _editorHotkeys ??= new GlobalEditorHotkeys(_windowHandle);
         var active = _settings.EditorHotkeys.Where(h => h.Edition == _kind).ToArray();
         if (_editorHotkeys.Matches(active)) return;
         _editorHotkeys.TryApply(active, out string error);
@@ -184,25 +184,13 @@ public partial class MainWindow
             await rollbackView.LoadVersionsAsync();
         };
         root.Children.Add(rollback);
-        root.Children.Add(new TextBlock
-        {
-            Text = "ASIO Patch", Style = (Style)FindResource("MutedText"), Margin = new Thickness(0, 0, 0, 6)
-        });
-        var redetect = CreateSaveManagerButton("Re-detect ASIO driver");
-        redetect.Style = (Style)FindResource("AsioButton");
-        redetect.Margin = new Thickness(0, 0, 0, 18);
-        ToolTipService.SetShowOnDisabled(redetect, true);
-        redetect.Click += ProbeInsertAsioButton_Click;
-        _redetectInsertAsioButton = redetect;
-        UpdateInsertAsioRedetectAvailability();
-        root.Children.Add(redetect);
         window.Closed += (_, _) => rollbackView?.Dispose();
         var close = CreateSaveManagerButton("Close");
         close.HorizontalAlignment = HorizontalAlignment.Right;
         close.Click += (_, _) => window.Close();
         root.Children.Add(close);
         try { window.ShowDialog(); }
-        finally { _hostSettingsWindow = null; _redetectInsertAsioButton = null; }
+        finally { _hostSettingsWindow = null; }
     }
 
     private void ShowEditorHotkeys(Window owner, PluginNodeSnapshot? selectedNode = null, PluginGroupSnapshot? selectedGroup = null,

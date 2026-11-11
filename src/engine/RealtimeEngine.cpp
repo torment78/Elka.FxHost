@@ -32,7 +32,7 @@ double elapsedMicroseconds(LARGE_INTEGER start, LARGE_INTEGER end) noexcept
     return (static_cast<double>(end.QuadPart - start.QuadPart) * 1000000.0) / frequency;
 }
 
-constexpr int MaxCallbackChannels = 64;
+constexpr int MaxCallbackChannels = 128;
 constexpr int MaxCallbackReadChannels = 128;
 constexpr int PingStatusIdle = 0;
 constexpr int PingStatusArmed = 1;

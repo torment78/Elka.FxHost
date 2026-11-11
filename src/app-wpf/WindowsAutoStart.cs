@@ -5,7 +5,7 @@ namespace Elka.VoiceMeeterFxHost.App;
 internal static class WindowsAutoStart
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "ElkaVoiceMeeterFxHost";
+    private const string RunValueName = "ElkaFxHost";
 
     public static bool IsEnabled()
     {
