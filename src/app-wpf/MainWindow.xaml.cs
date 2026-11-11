@@ -10861,12 +10861,8 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        var maxChannel = _kind switch
-        {
-            VoicemeeterKind.Standard => leftMode == CallbackMode.Output ? 24 : 12,
-            VoicemeeterKind.Banana => leftMode == CallbackMode.Output ? 40 : 22,
-            _ => leftMode == CallbackMode.Output ? 64 : 34
-        };
+        // One dry pass-through marker per ASIO channel (32 / 64 / up to 128).
+        var maxChannel = FxHostEdition.ChannelCount;
 
         for (var channel = 0; channel < maxChannel; channel++)
         {
