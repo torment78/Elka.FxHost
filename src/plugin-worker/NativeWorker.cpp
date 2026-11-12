@@ -72,7 +72,7 @@ public:
         definition.lpszClassName = L"ElkaNativePluginOwner";
         RegisterClassW(&definition);
         owner = CreateWindowExW(WS_EX_TOOLWINDOW, definition.lpszClassName,
-            L"Elka VoiceMeeter FX Host - Plugin", WS_OVERLAPPED,
+            L"Elka FX Host - Plugin", WS_OVERLAPPED,
             0, 0, 0, 0, nullptr, nullptr, definition.hInstance, nullptr);
         if (!owner) throw std::runtime_error("Could not create the plugin dialog owner.");
         hook = SetWindowsHookExW(WH_CBT, onCreate, nullptr, GetCurrentThreadId());
@@ -490,7 +490,8 @@ private:
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+    // Sandboxed plugins process live audio here too, so match the host's High priority.
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     const auto com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     int result = 5;
     try

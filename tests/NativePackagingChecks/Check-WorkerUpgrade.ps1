@@ -18,9 +18,9 @@ function Get-CleanupNames([string[]]$supplied) {
     }
     if ($conditions.Count) { throw 'Unclosed installer condition' }
 }
-$app = 'Elka.VoiceMeeterFxHost.App.dll'
+$app = 'ElkaFxHost.dll'
 $worker = 'Elka.PluginWorker.exe'
-$native = 'ElkaVoiceMeeterFxHost.Native.dll'
+$native = 'ElkaFxHost.Native.dll'
 $core = 'ElkaVoiceMeeterFxHost.RealtimeCore.dll'
 $obsolete = @($worker, 'Elka.PluginWorker.dll', 'Elka.PluginWorker.deps.json', 'Elka.PluginWorker.runtimeconfig.json', 'Elka.PluginWorker.pdb')
 $multi = @(Get-CleanupNames @($app, $native, $core))

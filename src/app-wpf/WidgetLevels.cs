@@ -36,9 +36,9 @@ internal interface IWidgetLevelSource
 
 internal sealed class NativeWidgetLevelSource : IWidgetLevelSource
 {
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_SetPluginLevelWatches([In] ulong[] masks, int count);
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_ReadPluginLevels([Out] float[] peaks, int count);
     public bool Watch(ulong[] masks)
     {

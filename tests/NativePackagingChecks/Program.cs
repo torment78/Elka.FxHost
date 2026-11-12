@@ -41,7 +41,7 @@ try
         Native.ReadDsp(new byte[88 * PluginCapacity.DspRows], PluginCapacity.DspRows, new byte[56 * 1024], 1024, out _, out _, out _, out _) != -1)
         throw new Exception("DSP diagnostics unexpectedly initialized a host.");
     var module = Process.GetCurrentProcess().Modules.Cast<ProcessModule>().Single(m =>
-        string.Equals(m.ModuleName, "ElkaVoiceMeeterFxHost.Native.dll", StringComparison.OrdinalIgnoreCase));
+        string.Equals(m.ModuleName, "ElkaFxHost.Native.dll", StringComparison.OrdinalIgnoreCase));
     using var file = File.OpenRead(module.FileName);
     if (!NativeLibrary.TryGetExport(module.BaseAddress, "ElkaFx_AddSandboxedPluginNodeWithMode", out _))
         throw new Exception("Sandbox mode export is missing.");
@@ -63,7 +63,7 @@ catch (Exception ex)
 
 internal static class Native
 {
-    private const string Dll = "ElkaVoiceMeeterFxHost.Native.dll";
+    private const string Dll = "ElkaFxHost.Native.dll";
     [DllImport(Dll, EntryPoint = "ElkaFx_GetInsertAsioDriverInfo", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int InsertDriverInfo(System.Text.StringBuilder name, int chars, out int inputs, out int outputs);
     [DllImport(Dll, EntryPoint = "ElkaFx_GetFailedHelperPeers", CallingConvention = CallingConvention.Cdecl)]

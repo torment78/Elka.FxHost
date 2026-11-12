@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "Elka VoiceMeeter FX Host": {
+    "Elka FX Host": {
       "commandName": "Project",
       "nativeDebugging": false,
       "environmentVariables": {

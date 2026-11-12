@@ -121,13 +121,13 @@ public partial class MainWindow
         if (_failedPluginNodes.Count == 0)
         {
             _trayIcon.Icon = _trayIconHandle;
-            _trayIcon.Text = "Elka VoiceMeeter FX Host";
+            _trayIcon.Text = "Elka FX Host";
         }
         else
         {
             _trayFailureIcon ??= TrayIconBadge.CreateWarning(_trayIconHandle);
             _trayIcon.Icon = _trayFailureIcon;
-            _trayIcon.Text = $"Elka VoiceMeeter FX Host - {FailedPluginSummary()}";
+            _trayIcon.Text = $"Elka FX Host - {FailedPluginSummary()}";
         }
     }
 

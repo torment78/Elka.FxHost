@@ -1,6 +1,6 @@
 # Current Architecture
 
-Elka VoiceMeeter FX Host is a WPF control application backed by native C++
+Elka FX Host is a WPF control application backed by native C++
 audio, VoiceMeeter integration, and JUCE plugin hosting.
 
 ## Signal Paths
@@ -67,7 +67,7 @@ path is silent until it reaches a destination.
 - realtime engine preparation and statistics
 - plugin scan, load, state, parameter, editor, and worker operations
 
-The released WPF app currently calls `ElkaVoiceMeeterFxHost.Native.dll`.
+The released WPF app currently calls `ElkaFxHost.Native.dll`.
 
 ### Realtime Engine
 

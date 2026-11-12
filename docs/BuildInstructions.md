@@ -29,7 +29,7 @@ dotnet build .\src\app-wpf\Elka.VoiceMeeterFxHost.App.csproj `
 
 The WPF project automatically configures and builds:
 
-- `ElkaVoiceMeeterFxHost.Native.dll`
+- `ElkaFxHost.Native.dll`
 - `ElkaVoiceMeeterFxHost.RealtimeCore.dll`
 - `Elka.PluginWorker.exe` (native C++, no managed worker project)
 - the WPF application
@@ -41,7 +41,7 @@ It selects the `vs2026-x64` CMake preset first and `vs2022-x64` as the fallback.
 Start VoiceMeeter, then run:
 
 ```powershell
-.\src\app-wpf\bin\Debug\net8.0-windows\win-x64\Elka.VoiceMeeterFxHost.App.exe
+.\src\app-wpf\bin\Debug\net8.0-windows\win-x64\ElkaFxHost.exe
 ```
 
 Complete a left-to-right route before expecting VST audio:
@@ -59,7 +59,7 @@ worker payloads synchronized. For native-only diagnostics:
 
 ```powershell
 cmake --preset vs2026-x64
-cmake --build --preset debug-vs2026 --target ElkaVoiceMeeterFxHost.Native
+cmake --build --preset debug-vs2026 --target ElkaFxHost.Native
 cmake --build --preset debug-vs2026 --target ElkaVoiceMeeterFxHost.RealtimeCore
 cmake --build --preset debug-vs2026 --target Elka.PluginWorker
 ```

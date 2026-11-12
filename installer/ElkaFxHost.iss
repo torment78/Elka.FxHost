@@ -23,7 +23,7 @@
   #define OutputBaseFilename "ElkaFxHostSetup"
 #endif
 
-#define AppExe "Elka.VoiceMeeterFxHost.App.exe"
+#define AppExe "ElkaFxHost.exe"
 #define DriverDll "ElkaFxHost.Asio.dll"
 #define AsioSettingsKey "Software\ElkaSoft\FxHost\Asio"
 
@@ -32,7 +32,7 @@
 #endif
 
 [Setup]
-; New AppId: Elka FX Host installs side by side with Elka VoiceMeeter FX Host.
+; New AppId: Elka FX Host installs side by side with Elka FX Host.
 AppId={{F0F07B05-AB22-4FE8-867E-71604337526D}
 AppName=Elka FX Host
 AppVersion={#AppVersion}
@@ -89,6 +89,14 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "{#DriverDll},MatrixLinkLo
 ; reboot in that case. regserver registers it as the ASIO device "Elka FX Host" and
 ; unregisters it on uninstall.
 Source: "{#SourceDir}\{#DriverDll}"; DestDir: "{app}"; Flags: ignoreversion regserver restartreplace uninsrestartdelete 64bit
+
+[InstallDelete]
+; Before 0.1.2 the program was Elka.VoiceMeeterFxHost.App.exe with ElkaVoiceMeeterFxHost.Native.dll.
+Type: files; Name: "{app}\Elka.VoiceMeeterFxHost.App.exe"
+Type: files; Name: "{app}\Elka.VoiceMeeterFxHost.App.dll"
+Type: files; Name: "{app}\Elka.VoiceMeeterFxHost.App.deps.json"
+Type: files; Name: "{app}\Elka.VoiceMeeterFxHost.App.runtimeconfig.json"
+Type: files; Name: "{app}\ElkaVoiceMeeterFxHost.Native.dll"
 
 [Registry]
 ; Driver channel count. The per-user value is what the driver and the app read first;

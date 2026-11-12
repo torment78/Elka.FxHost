@@ -28,6 +28,11 @@ internal static class Program
                 return 0;
             }
 
+            // Audio host: run the whole process at Windows "High" priority (not Realtime, which
+            // can starve input and disk). The audio threads additionally use MMCSS Pro Audio.
+            try { System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.High; }
+            catch { /* Never block startup over the priority class. */ }
+
             StartupTrayOptions.Configure(args);
             PluginWorkerLocator.ConfigureForCurrentProcess();
 

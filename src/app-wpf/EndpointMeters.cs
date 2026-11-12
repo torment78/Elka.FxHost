@@ -20,12 +20,12 @@ internal sealed class NativeEndpointPeakSource : IEndpointPeakSource
         ReadPeaks(handle, peaks, peaks.Length, IntPtr.Zero, 0, out _, out sequence);
     public void Close(int handle) => CloseMonitor(handle);
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_OpenSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_OpenSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     private static extern int OpenMonitor(int stream, int outputSide, int firstChannel, int channels);
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_CloseSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_CloseSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     private static extern void CloseMonitor(int handle);
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_ReadSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_ReadSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ReadPeaks(int handle, [Out] float[] peaks, int peakCount,
         IntPtr spectrum, int spectrumCount, out int sampleRate, out ulong sequence);
 }

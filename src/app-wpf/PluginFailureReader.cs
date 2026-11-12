@@ -30,6 +30,6 @@ internal sealed class PluginFailureReader
         return false;
     }
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_GetPluginNodeFailures([Out] int[] flags, int count);
 }

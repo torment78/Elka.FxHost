@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $fixture = Join-Path $root 'artifacts/native-packaging-checks'
 $exe = Join-Path $fixture 'NativePackagingChecks.exe'
-$current = Join-Path $root 'build-vs2026/Release/ElkaVoiceMeeterFxHost.Native.dll'
+$current = Join-Path $root 'build-vs2026/Release/ElkaFxHost.Native.dll'
 $hash = (Get-FileHash -LiteralPath $current -Algorithm SHA256).Hash
 if (!(Test-Path -LiteralPath $exe)) { throw 'Publish NativePackagingChecks before running this test.' }
 
@@ -25,7 +25,7 @@ function Invoke-Check {
     return $result
 }
 
-Copy-Item -LiteralPath $LegacyBridge -Destination (Join-Path $fixture 'ElkaVoiceMeeterFxHost.Native.dll') -Force
+Copy-Item -LiteralPath $LegacyBridge -Destination (Join-Path $fixture 'ElkaFxHost.Native.dll') -Force
 $stale = Invoke-Check
 if ($stale.Code -eq 0 -or $stale.Output -notmatch 'ElkaFx_(IsVoicemeeterRemoteReady|OpenSignalMonitor)') {
     throw "Expected the legacy sidecar to reproduce the missing monitor export: $($stale.Output)"
@@ -35,7 +35,7 @@ Write-Output 'PASS: reproduced the installed-app error with the legacy sidecar.'
 $script = [IO.File]::ReadAllText((Join-Path $root 'installer/ElkaVoiceMeeterFxHost.iss'))
 $section = [regex]::Match($script, '(?ms)^\[InstallDelete\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 $names = [regex]::Matches($section, 'Name: "\{app\}\\([^"\\]+)"') | ForEach-Object { $_.Groups[1].Value }
-if ($names -notcontains 'ElkaVoiceMeeterFxHost.Native.dll' -or $names.Count -ne 10) {
+if ($names -notcontains 'ElkaFxHost.Native.dll' -or $names.Count -ne 10) {
     throw 'The installer upgrade cleanup list is missing expected owned files.'
 }
 # Scratch markers prove the cleanup leaves user content alone; no real settings are touched.

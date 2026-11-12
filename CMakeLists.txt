@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ElkaVoiceMeeterFxHost
+project(ElkaFxHost
     VERSION 0.7.6.3
     DESCRIPTION "Elka FX Host: VST host behind its own virtual ASIO driver"
     LANGUAGES CXX)
@@ -51,7 +51,7 @@ set(ELKA_NATIVE_CORE_SOURCES
     src/plugins/PluginHostLayer.cpp
 )
 
-add_library(ElkaVoiceMeeterFxHost.Native SHARED
+add_library(ElkaFxHost.Native SHARED
     src/native_api/FxHostNativeApi.cpp
     ${ELKA_NATIVE_CORE_SOURCES}
 )
@@ -62,7 +62,7 @@ add_executable(Elka.PluginWorker WIN32
     src/plugins/PluginHostLayer.cpp
 )
 
-foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
+foreach(target IN ITEMS ElkaFxHost.Native Elka.PluginWorker)
     target_include_directories(${target} PRIVATE
         src
     )
@@ -92,12 +92,12 @@ foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
     )
 endforeach()
 
-target_compile_definitions(ElkaVoiceMeeterFxHost.Native PRIVATE
+target_compile_definitions(ElkaFxHost.Native PRIVATE
     ELKA_VOICEMEETER_FX_HOST_NATIVE_EXPORTS=1
 )
 
 if (ELKA_ENABLE_JUCE_PLUGIN_HOST)
-    foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
+    foreach(target IN ITEMS ElkaFxHost.Native Elka.PluginWorker)
         target_compile_definitions(${target} PRIVATE
             ELKA_ENABLE_JUCE_PLUGIN_HOST=1
             ELKA_ENABLE_VST2_HOST=$<BOOL:${ELKA_ENABLE_VST2_HOST}>
@@ -118,7 +118,7 @@ if (ELKA_ENABLE_JUCE_PLUGIN_HOST)
         )
     endforeach()
 else()
-    foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native)
+    foreach(target IN ITEMS ElkaFxHost.Native)
         target_compile_definitions(${target} PRIVATE
             ELKA_ENABLE_JUCE_PLUGIN_HOST=0
         )
@@ -126,7 +126,7 @@ else()
 endif()
 
 if (MSVC)
-    foreach(target IN ITEMS ElkaVoiceMeeterFxHost.Native Elka.PluginWorker)
+    foreach(target IN ITEMS ElkaFxHost.Native Elka.PluginWorker)
         target_compile_options(${target} PRIVATE
             /W4
             /permissive-

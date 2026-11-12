@@ -87,7 +87,7 @@ $ErrorActionPreference = $previousErrorActionPreference
 
 if ($releaseViewExitCode -ne 0) {
     Write-UploadLog "Release $Tag does not exist. Creating it."
-    & $gh release create $Tag --repo $Repository --title $Tag --notes "Elka VoiceMeeter FX Host $Tag"
+    & $gh release create $Tag --repo $Repository --title $Tag --notes "Elka FX Host $Tag"
     if ($LASTEXITCODE -ne 0) {
         throw "GitHub release create failed with exit code $LASTEXITCODE."
     }

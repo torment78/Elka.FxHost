@@ -250,6 +250,7 @@ public partial class MainWindow : Window
 
         LoadSettings();
         ApplySavedWindowPlacement();
+        WindowsAutoStart.RefreshPathIfEnabled();
         ShouldStartHiddenToTray = StartupTrayOptions.StartHiddenToTray || _settings.StartToTray;
         if (ShouldStartHiddenToTray)
         {
@@ -308,7 +309,7 @@ public partial class MainWindow : Window
 
         _trayIcon = new Forms.NotifyIcon
         {
-            Text = "Elka VoiceMeeter FX Host",
+            Text = "Elka FX Host",
             Icon = _trayIconHandle,
             ContextMenuStrip = menu,
             Visible = true
@@ -393,7 +394,7 @@ public partial class MainWindow : Window
         {
             _trayIcon?.ShowBalloonTip(
                 2500,
-                "Elka VoiceMeeter FX Host",
+                "Elka FX Host",
                 "Still running in the tray. Right-click the tray icon to open or shut down.",
                 Forms.ToolTipIcon.Info);
             _trayCloseHintShown = true;
@@ -2293,7 +2294,7 @@ public partial class MainWindow : Window
             UpdateVbanControlStatus("VBAN control error");
             if (showErrors)
             {
-                MessageBox.Show(this, ex.Message, "Elka VoiceMeeter FX Host", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(this, ex.Message, "Elka FX Host", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -3054,10 +3055,9 @@ public partial class MainWindow : Window
         var buses = VoicemeeterIoLayout.GetEndpoints(CallbackMode.Output, _kind);
         var builder = new StringBuilder();
 
-        builder.AppendLine("Elka VoiceMeeter FX Host diagnostics");
+        builder.AppendLine("Elka FX Host diagnostics");
         builder.AppendLine($"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        builder.AppendLine($"Voicemeeter kind: {_kind}");
-        builder.AppendLine($"Selected side: {_selectedMode}");
+                builder.AppendLine($"Selected side: {_selectedMode}");
         builder.AppendLine($"Workspace view: {_workspaceView}");
         builder.AppendLine($"ASIO link: {_engine.AsioLinkStatus()}");
         builder.AppendLine($"Engine status: {_engine.StatusText}");
@@ -4875,7 +4875,7 @@ private void RefreshEndpointButtonSelection()
             IsChecked = settings.RouteMuteNormal.All(static muted => muted),
             Foreground = (Brush)FindResource("VolumeAccentBrush"),
             Margin = new Thickness(0, 6, 0, 0),
-            ToolTip = "When routed, replace the normal VoiceMeeter path for this block instead of layering on top."
+            ToolTip = "When routed, replace the normal pass-through for this block instead of layering on top."
         };
         muteStandard.Checked += (_, _) => SetEndpointMuteStandardRouting(settings, true);
         muteStandard.Unchecked += (_, _) => SetEndpointMuteStandardRouting(settings, false);
@@ -6125,7 +6125,7 @@ private void RefreshEndpointButtonSelection()
                 return;
             }
 
-            AppendLog("Saved VST graph was not restored yet because VoiceMeeter has not reported an audio clock.");
+            AppendLog("Saved VST graph was not restored yet because the ASIO link has no audio clock yet.");
             return;
         }
 
@@ -10117,7 +10117,7 @@ private void RefreshEndpointButtonSelection()
                 : FindNodeToEndpointConnection(source.Node.Slot, source.Pin, target.Mode, target.Channel);
             if (existing is null && !CanConnectNodeOutputToEndpoint(source, target))
             {
-                AppendLog("Return VST output to a writable destination in the same VoiceMeeter callback section.");
+                AppendLog("Return VST output to an FX Out node on this canvas.");
                 return;
             }
 

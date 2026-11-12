@@ -340,7 +340,7 @@ internal sealed class SignalMonitorFrame
 
 internal static class NativeSignalMonitor
 {
-    private const string Dll = "ElkaVoiceMeeterFxHost.Native.dll";
+    private const string Dll = "ElkaFxHost.Native.dll";
     [DllImport(Dll, EntryPoint = "ElkaFx_OpenSignalMonitor", CallingConvention = CallingConvention.Cdecl)]
     internal static extern int Open(int stream, int outputSide, int firstChannel, int channels);
     [DllImport(Dll, EntryPoint = "ElkaFx_OpenSignalMonitorChannels", CallingConvention = CallingConvention.Cdecl)]

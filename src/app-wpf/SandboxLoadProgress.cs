@@ -67,8 +67,8 @@ internal sealed class SandboxLoadProgress : IDisposable
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int bytes);
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern void ElkaFx_CancelSandboxPluginLoad();
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_GetPluginLoadProgress(StringBuilder value, int chars);
 }

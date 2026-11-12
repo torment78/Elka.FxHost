@@ -10,7 +10,7 @@ internal sealed record PluginProbeResult(bool Succeeded, bool TimedOut, string M
 internal static class PluginProbeCli
 {
     public const string Argument = "--probe-plugin-file";
-    private const string DllName = "ElkaVoiceMeeterFxHost.Native.dll";
+    private const string DllName = "ElkaFxHost.Native.dll";
 
     public static bool IsProbeCommand(string[] args)
     {

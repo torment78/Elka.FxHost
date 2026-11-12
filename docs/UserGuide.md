@@ -1,14 +1,14 @@
 # User Guide
 
-This guide covers normal use of Elka VoiceMeeter FX Host. Developer setup is in
+This guide covers normal use of Elka FX Host. Developer setup is in
 [Run in Visual Studio](VisualStudioRun.md), and release packaging is in
 [Publishing and GitHub Releases](Publishing.md).
 
 ## Install And Start
 
 1. Install and start VoiceMeeter.
-2. Install Elka VoiceMeeter FX Host with the signed installer, or extract the
-   portable ZIP and run `Elka.VoiceMeeterFxHost.App.exe`.
+2. Install Elka FX Host with the signed installer, or extract the
+   portable ZIP and run `ElkaFxHost.exe`.
 3. Confirm the status line shows the detected sample rate and block size.
 4. Open the in-app log if VoiceMeeter, the callback, or a plugin does not load.
 

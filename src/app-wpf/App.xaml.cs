@@ -73,8 +73,8 @@ internal static class StartupCrashLogger
         try
         {
             MessageBox.Show(
-                $"Elka VoiceMeeter FX Host could not start cleanly.\n\n{exception.Message}\n\nCrash log:\n{CrashLogPath}",
-                "Elka VoiceMeeter FX Host",
+                $"Elka FX Host could not start cleanly.\n\n{exception.Message}\n\nCrash log:\n{CrashLogPath}",
+                "Elka FX Host",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }

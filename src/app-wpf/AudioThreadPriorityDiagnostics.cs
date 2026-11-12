@@ -40,7 +40,7 @@ internal sealed class AudioThreadPriorityDiagnostics
         catch (EntryPointNotFoundException) { _unavailable = true; }
     }
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_GetAudioThreadPriorityInfo(
         [Out] int[] before, [Out] int[] after, int count, out int mode);
 }

@@ -20,6 +20,25 @@ internal static class WindowsAutoStart
         }
     }
 
+    /// <summary>If autostart is on but points at another file (e.g. the old program name), repoint it.</summary>
+    public static void RefreshPathIfEnabled()
+    {
+        try
+        {
+            var executablePath = Environment.ProcessPath;
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+            if (string.IsNullOrWhiteSpace(executablePath) || key?.GetValue(RunValueName) is not string command ||
+                string.IsNullOrWhiteSpace(command) ||
+                string.Equals(command.Trim('"'), executablePath, StringComparison.OrdinalIgnoreCase))
+                return;
+            key.SetValue(RunValueName, $"\"{executablePath}\"", RegistryValueKind.String);
+        }
+        catch
+        {
+            // Startup registration is a convenience; never block the app over it.
+        }
+    }
+
     public static bool TrySetEnabled(bool enabled, out string error)
     {
         error = string.Empty;

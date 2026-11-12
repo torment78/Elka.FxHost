@@ -28,10 +28,7 @@ internal static class VoicemeeterKindInfo
     {
         return kind switch
         {
-            VoicemeeterKind.Standard => "Voicemeeter Standard",
-            VoicemeeterKind.Banana => "Voicemeeter Banana",
-            VoicemeeterKind.Potato => "Voicemeeter Potato",
-            _ => "Voicemeeter Potato profile"
+            _ => "Elka FX Host"
         };
     }
 }
@@ -844,7 +841,7 @@ internal sealed record AsioDriverInfo(string Name, int Inputs, int Outputs);
 internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
 {
     internal static Func<PluginChoice, IDisposable?>? BeginSandboxLoad { get; set; }
-    private const string DllName = "ElkaVoiceMeeterFxHost.Native.dll";
+    private const string DllName = "ElkaFxHost.Native.dll";
     private const int NativeConnectionRunning = 3;
     private bool _attached;
     private bool _disposed;
@@ -870,7 +867,7 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
         catch (DllNotFoundException)
         {
             _attached = false;
-            _lastStatus = "Native bridge DLL missing. Build ElkaVoiceMeeterFxHost.Native first.";
+            _lastStatus = "Native bridge DLL missing. Build ElkaFxHost.Native first.";
         }
         catch (BadImageFormatException)
         {

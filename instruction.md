@@ -1,4 +1,4 @@
-# Elka VoiceMeeter FX Host Instructions
+# Elka FX Host Instructions
 
 This repo builds a WPF desktop control app with a native C++ VoiceMeeter callback
 and VST3 host backend. The UI follows the same ELKA dark color scheme used by

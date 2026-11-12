@@ -2,12 +2,17 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <!-- Elka FX Host 0.1.1 includes upstream VoiceMeeter FX Host 0.8.3.21. -->
-    <Version>0.1.1</Version>
-    <InformationalVersion>0.1.1</InformationalVersion>
+    <Version>0.1.2</Version>
+    <InformationalVersion>0.1.2</InformationalVersion>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <StartupObject>Elka.VoiceMeeterFxHost.App.Program</StartupObject>
+    <!-- Program file / process name and the names Windows shows (Task Manager, properties). -->
+    <AssemblyName>ElkaFxHost</AssemblyName>
+    <Product>Elka FX Host</Product>
+    <AssemblyTitle>Elka FX Host</AssemblyTitle>
+    <Company>ElkaSoft</Company>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
@@ -28,7 +33,7 @@
     <NativeBuildPreset Condition="'$(NativeBuildPreset)' == '' and '$(NativeBuildConfiguration)' != 'Release' and '$(NativeCMakePreset)' == 'vs2022-x64'">debug-vs2022</NativeBuildPreset>
     <NativeBuildPreset Condition="'$(NativeBuildPreset)' == '' and '$(NativeBuildConfiguration)' == 'Release'">release-vs2026</NativeBuildPreset>
     <NativeBuildPreset Condition="'$(NativeBuildPreset)' == ''">debug-vs2026</NativeBuildPreset>
-    <NativeBridgePath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaVoiceMeeterFxHost.Native.dll</NativeBridgePath>
+    <NativeBridgePath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaFxHost.Native.dll</NativeBridgePath>
     <AsioDriverPath>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\ElkaFxHost.Asio.dll</AsioDriverPath>
     <Vst2SdkPath Condition="'$(Vst2SdkPath)' == '' and '$(ELKA_VST2_SDK_PATH)' != ''">$(ELKA_VST2_SDK_PATH)</Vst2SdkPath>
     <Vst2SdkPath Condition="'$(Vst2SdkPath)' == '' and Exists('$(RepoRoot)\external\VST2_SDK\pluginterfaces\vst2.x\aeffect.h') and Exists('$(RepoRoot)\external\VST2_SDK\pluginterfaces\vst2.x\aeffectx.h')">$(RepoRoot)\external\VST2_SDK</Vst2SdkPath>
@@ -40,7 +45,7 @@
     <ReleaseDir Condition="'$(ReleaseDir)' == ''">$(RepoRoot)\artifacts\release\</ReleaseDir>
     <PublishOutputDir Condition="'$(PublishOutputDir)' == '' and '$(PublishDir)' != ''">$(PublishDir)</PublishOutputDir>
     <PublishOutputDir Condition="'$(PublishOutputDir)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\publish\</PublishOutputDir>
-    <PublishedExePath Condition="'$(PublishedExePath)' == ''">$(PublishOutputDir)Elka.VoiceMeeterFxHost.App.exe</PublishedExePath>
+    <PublishedExePath Condition="'$(PublishedExePath)' == ''">$(PublishOutputDir)ElkaFxHost.exe</PublishedExePath>
     <ReleaseExePath Condition="'$(ReleaseExePath)' == ''">$(ReleaseDir)ElkaFxHost.exe</ReleaseExePath>
     <ReleaseZipPath Condition="'$(ReleaseZipPath)' == ''">$(ReleaseDir)ElkaFxHost-$(RuntimeIdentifier)-framework-dependent.zip</ReleaseZipPath>
     <ReleaseInstallerBaseName Condition="'$(ReleaseInstallerBaseName)' == ''">ElkaFxHostSetup-v$(Version)</ReleaseInstallerBaseName>
@@ -48,7 +53,7 @@
     <InnoSetupScript Condition="'$(InnoSetupScript)' == ''">$(RepoRoot)\installer\ElkaFxHost.iss</InnoSetupScript>
     <ReleaseUploadLogPath Condition="'$(ReleaseUploadLogPath)' == ''">$(ReleaseDir)github-upload.log</ReleaseUploadLogPath>
     <SingleFilePublishDir Condition="'$(SingleFilePublishDir)' == ''">$(RepoRoot)\artifacts\publish\ElkaFxHost\$(RuntimeIdentifier)-singlefile\</SingleFilePublishDir>
-    <SingleFilePublishedExePath Condition="'$(SingleFilePublishedExePath)' == ''">$(SingleFilePublishDir)Elka.VoiceMeeterFxHost.App.exe</SingleFilePublishedExePath>
+    <SingleFilePublishedExePath Condition="'$(SingleFilePublishedExePath)' == ''">$(SingleFilePublishDir)ElkaFxHost.exe</SingleFilePublishedExePath>
     <PluginWorkerOutputDir>$(RepoRoot)\$(NativeBuildDir)\$(NativeBuildConfiguration)\</PluginWorkerOutputDir>
     <CMakeExe Condition="'$(CMakeExe)' == '' and Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe')">C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe</CMakeExe>
     <CMakeExe Condition="'$(CMakeExe)' == '' and Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe')">C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe</CMakeExe>
@@ -85,7 +90,7 @@
     <Exec Command="&quot;$(CMakeExe)&quot; --preset $(NativeCMakePreset) $(NativeVst2ConfigureArg)"
           WorkingDirectory="$(RepoRoot)" />
     <Message Importance="high" Text="Building native FX Host engine: $(NativeBuildPreset)" />
-    <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaVoiceMeeterFxHost.Native"
+    <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaFxHost.Native"
           WorkingDirectory="$(RepoRoot)" />
     <Message Importance="high" Text="Building Elka FX Host ASIO driver and loopback tool: $(NativeBuildPreset)" />
     <Exec Command="&quot;$(CMakeExe)&quot; --build --preset $(NativeBuildPreset) --target ElkaFxHost.Asio MatrixLinkLoopback"
@@ -124,7 +129,7 @@
   <Target Name="AddNativeBridgeToPublish" BeforeTargets="ComputeFilesToPublish;_ComputeFilesToBundle" DependsOnTargets="BuildNativeBridge">
     <ItemGroup>
       <ResolvedFileToPublish Include="$(NativeBridgePath)" Condition="Exists('$(NativeBridgePath)')">
-        <RelativePath>ElkaVoiceMeeterFxHost.Native.dll</RelativePath>
+        <RelativePath>ElkaFxHost.Native.dll</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
       </ResolvedFileToPublish>

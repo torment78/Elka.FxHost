@@ -17,11 +17,11 @@ internal sealed class NativePeakHoldSource : IPeakHoldSource
     public int Read(EndpointMeterAddress a, float[] maximum, uint[] overs) => ReadNative(a.Stream, a.OutputSide ? 1 : 0, a.FirstChannel, a.Channels, maximum, overs);
     public int Reset(EndpointMeterAddress a) => ResetNative(a.Stream, a.OutputSide ? 1 : 0, a.FirstChannel, a.Channels);
 
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldWatch", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldWatch", CallingConvention = CallingConvention.Cdecl)]
     private static extern int WatchNative(int stream, int output, int first, int count, int on);
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldRead", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldRead", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ReadNative(int stream, int output, int first, int count, [Out] float[] maximum, [Out] uint[] overs);
-    [DllImport("ElkaVoiceMeeterFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldReset", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("ElkaFxHost.Native.dll", EntryPoint = "ElkaFx_PeakHoldReset", CallingConvention = CallingConvention.Cdecl)]
     private static extern int ResetNative(int stream, int output, int first, int count);
 }
 

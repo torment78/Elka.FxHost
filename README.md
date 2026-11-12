@@ -8,7 +8,7 @@ Matrix  ──►  "FX In A1…P8"   (driver outputs)  ──►  FX Host canvas
 Matrix  ◄──  "FX Out A1…P8"  (driver inputs)   ◄──  anything wired to the right side
 ```
 
-It is based on Elka VoiceMeeter FX Host and keeps its canvas, VST hosting, groups,
+It is based on Elka FX Host and keeps its canvas, VST hosting, groups,
 sandboxed plugins, signal monitor, DSP diagnostics and save/load. The VoiceMeeter Remote
 API, the VoiceMeeter callback, ASIO Patch / Patch.insert and the delay workspace are
 **removed**. The only audio path is the Elka FX Host ASIO driver.
@@ -20,7 +20,7 @@ API, the VoiceMeeter callback, ASIO Patch / Patch.insert and the delay workspace
 | `ElkaFxHost.Asio.dll` | `src/asio_driver` | User-mode ASIO driver (COM). Matrix loads it in its own process. Lists as **Elka FX Host**. |
 | Link protocol | `src/matrix_link/MatrixLinkProtocol.h` | Shared memory between the driver and the app: a 4-slot ring per direction, sequence numbers, heartbeats. |
 | `MatrixLinkHost` | `src/matrix_link` | App side: serves each driver block through the realtime engine (`RealtimeEngine::processInsertAsio`). |
-| `ElkaVoiceMeeterFxHost.Native.dll` | `src/native_api` | Engine + plugin host, exposed to the WPF app. No VoiceMeeter code. |
+| `ElkaFxHost.Native.dll` | `src/native_api` | Engine + plugin host, exposed to the WPF app. No VoiceMeeter code. |
 | WPF app | `src/app-wpf` | One canvas: FX In banks on the left, FX Out banks on the right. |
 | `MatrixLinkLoopback.exe` | `tools/MatrixLinkLoopback` | Stands in for Matrix: plays a tone into FX In and checks that it comes back on FX Out. |
 
@@ -59,7 +59,7 @@ See [docs/AsioDriver.md](docs/AsioDriver.md).
 (`installer/ElkaFxHost.iss`). One setup installs the app and the driver. It registers the
 driver silently, asks Matrix (32) / Matrix Coconut (64) / Custom (8–128), and the
 uninstaller removes the driver again. For silent installs, use `/VERYSILENT /CHANNELS=32`.
-It installs side by side with Elka VoiceMeeter FX Host.
+It installs side by side with Elka FX Host.
 
 ## Not done yet
 

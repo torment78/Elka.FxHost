@@ -6,7 +6,7 @@ namespace Elka.VoiceMeeterFxHost.App;
 
 internal sealed class DspPerformanceMonitor : IDisposable
 {
-    private const string DllName = "ElkaVoiceMeeterFxHost.Native.dll";
+    private const string DllName = "ElkaFxHost.Native.dll";
     private readonly ManualResetEventSlim _stop = new(false);
     private readonly Thread _reader;
     private DspDashboard _snapshot = DspDashboard.Empty;
