@@ -209,3 +209,9 @@ target_include_directories(MatrixLinkLoopback PRIVATE src "${ELKA_JUCE_DIR}/modu
 target_compile_definitions(MatrixLinkLoopback PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(MatrixLinkLoopback PRIVATE Ole32 User32)
 add_dependencies(MatrixLinkLoopback ElkaFxHost.Asio)
+
+# FX Host severs FX In from FX Out: only drawn lines pass audio.
+add_executable(DryPathChecks EXCLUDE_FROM_ALL tests/DryPathChecks/main.cpp src/engine/RealtimeEngine.cpp)
+target_include_directories(DryPathChecks PRIVATE src)
+target_compile_definitions(DryPathChecks PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(DryPathChecks PRIVATE Avrt)

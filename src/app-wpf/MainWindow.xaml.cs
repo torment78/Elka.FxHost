@@ -10939,6 +10939,13 @@ private void RefreshEndpointButtonSelection()
 
     private void DrawDefaultPassthroughConnections()
     {
+        // FX Host has no dry path: FX In never reaches FX Out unless a line is drawn,
+        // so there are no default pass-through markers to show.
+        if (FxHostEdition.AsioOnly)
+        {
+            return;
+        }
+
         var leftMode = CanvasEndpointMode(outputSide: false);
         var rightMode = CanvasEndpointMode(outputSide: true);
         if (leftMode != rightMode)

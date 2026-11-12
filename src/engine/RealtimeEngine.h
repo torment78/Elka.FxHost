@@ -250,6 +250,7 @@ private:
     void probeAudioDiscontinuity(AudioBufferView buffer, CallbackStreamKind kind, int streamIndex, int readOffset, int position, bool preferCurrentBuffer) noexcept;
     void probePassthroughResidual(AudioBufferView buffer, CallbackStreamKind kind, int readOffset, int position) noexcept;
     void copyPassthrough(AudioBufferView buffer, int readOffset, bool suppressInputCallbackChannels) noexcept;
+    void writeDryPath(AudioBufferView buffer, CallbackStreamKind kind, bool enableInputOutputRoutes, int readOffset, bool suppressInputCallbackChannels) noexcept;
     void applyConfiguredDelays(AudioBufferView buffer, CallbackStreamKind kind, int readOffset, int streamIndex, bool suppressInputCallbackChannels) noexcept;
     void applyPlugins(AudioBufferView buffer, CallbackStreamKind kind, int readOffset, bool suppressInputCallbackChannels, std::array<bool, MaxChannels>& pluginOutputWritten, DspPerformanceScope* timing) noexcept;
     void applyPluginPassthroughRoutes(AudioBufferView buffer, CallbackStreamKind kind, int readOffset, int streamIndex, bool suppressInputCallbackChannels, std::array<bool, MaxChannels>& pluginOutputWritten) noexcept;

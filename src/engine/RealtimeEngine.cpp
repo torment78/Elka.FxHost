@@ -1473,7 +1473,7 @@ void RealtimeEngine::processInternal(
     const bool processingWork = hasProcessingWork(kind, enableInputOutputRoutes, delayStream);
     if (!processingWork)
     {
-        copyPassthrough(buffer, readOffset, suppressInputCallbackChannels);
+        writeDryPath(buffer, kind, enableInputOutputRoutes, readOffset, suppressInputCallbackChannels);
         if (RealtimeAudioProbeDiagnosticsEnabled)
             probeAudioDiscontinuity(buffer, kind, delayStream, readOffset, PopProbePostCopy, true);
         if (RealtimeAudioProbeDiagnosticsEnabled)
@@ -1493,7 +1493,7 @@ void RealtimeEngine::processInternal(
         return;
     }
 
-    copyPassthrough(buffer, readOffset, suppressInputCallbackChannels);
+    writeDryPath(buffer, kind, enableInputOutputRoutes, readOffset, suppressInputCallbackChannels);
     if (RealtimeAudioProbeDiagnosticsEnabled)
         probeAudioDiscontinuity(buffer, kind, delayStream, readOffset, PopProbePostCopy, true);
     if (RealtimeAudioProbeDiagnosticsEnabled)
@@ -2177,6 +2177,27 @@ void RealtimeEngine::probePassthroughResidual(
     else if (position == ResidualProbeFinal)
         finalResidualCount.fetch_add(1, std::memory_order_relaxed);
 }
+void RealtimeEngine::writeDryPath(
+    AudioBufferView buffer,
+    CallbackStreamKind kind,
+    bool enableInputOutputRoutes,
+    int readOffset,
+    bool suppressInputCallbackChannels) noexcept
+{
+    // FX Host ASIO link (processInsertAsio): FX In and FX Out are severed. Every FX Out
+    // starts silent; only wires drawn on the canvas (VST outputs, In->Out lines) write to it.
+    if (kind == CallbackStreamKind::InputInsert && !enableInputOutputRoutes)
+    {
+        const int samples = std::max(0, buffer.samplesPerFrame);
+        for (int ch = 0; ch < buffer.outputChannels; ++ch)
+            if (float* out = buffer.write[ch]; out != nullptr && samples > 0)
+                std::fill_n(out, samples, 0.0f);
+        return;
+    }
+
+    copyPassthrough(buffer, readOffset, suppressInputCallbackChannels);
+}
+
 void RealtimeEngine::copyPassthrough(
     AudioBufferView buffer,
     int readOffset,

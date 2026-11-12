@@ -46,7 +46,8 @@ block, so the round trip is two buffers in total. The driver reports `in = out =
 size` to Matrix. If the app is closed or misses a block, Matrix gets silence on FX Out,
 never stale audio, and streaming carries on.
 
-Channels with no cables pass audio through dry, as ASIO Patch did.
+FX In and FX Out are severed: an FX Out channel is silent unless a line on the canvas
+feeds it (FX In -> VST -> FX Out, or FX In -> FX Out directly). Nothing passes through dry.
 
 ## Run and test
 
