@@ -59,6 +59,8 @@ internal sealed class SignalMonitorWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/VoicemeeterDelay.ico"));
         _view = new SignalMonitorView(endpoint, side, channelCount, hue) { HeaderRightInset = 150 };
+        // Rows and curves are named by ASIO channel (A1, A2 ... P8), not L/R.
+        _view.SetChannelNames(channels.Select(FxHostEdition.ChannelShortName).ToArray());
         var surface = new Grid();
         surface.Children.Add(_view);
         surface.Children.Add(CreateViewControls());
@@ -333,7 +335,9 @@ internal sealed class SignalMonitorWindow : Window
 internal sealed class SignalMonitorFrame
 {
     internal readonly float[] Peaks = new float[8];
-    internal readonly float[] Spectrum = new float[120];
+    internal const int Bins = 120;
+    // One curve per monitored channel (up to 8), channel-major: channel c uses [c * Bins, (c + 1) * Bins).
+    internal readonly float[] Spectrum = new float[Bins * 8];
     internal int SampleRate;
     internal double Timestamp = SignalMonitorBallistics.Now;
 }
@@ -356,7 +360,13 @@ internal sealed class SignalMonitorView : FrameworkElement
 {
     internal double HeaderRightInset { get; set; }
     internal long RenderedFrames { get; private set; }
-    private static readonly string[] Labels = ["L", "R", "C", "LFE", "SL", "SR", "RL", "RR"];
+    private string[] _labels = ["L", "R", "C", "LFE", "SL", "SR", "RL", "RR"];
+    internal void SetChannelNames(IReadOnlyList<string> names)
+    {
+        _labels = Enumerable.Range(0, 8).Select(c => c < names.Count ? names[c] : (c + 1).ToString(CultureInfo.InvariantCulture)).ToArray();
+        _historyRenderer.SetChannelNames(_labels);
+        InvalidateVisual();
+    }
     private static readonly Brush TextBrush = Frozen(Color.FromRgb(237, 243, 246));
     private static readonly Brush MutedBrush = Frozen(Color.FromRgb(154, 168, 178));
     private static readonly Brush FieldBrush = Frozen(Color.FromRgb(17, 23, 27));
@@ -396,6 +406,13 @@ internal sealed class SignalMonitorView : FrameworkElement
     private static readonly double[] GridHz = [20, 100, 1000, 10000, 20000];
     private Brush _hue = GreenBrush, _dim = FieldBrush, _header = FieldBrush;
     private Pen _spectrumPen = GridPen;
+    private static readonly Color[] ChannelColors =
+    [
+        Color.FromRgb(85, 194, 122), Color.FromRgb(86, 156, 255), Color.FromRgb(255, 170, 60), Color.FromRgb(214, 110, 255),
+        Color.FromRgb(255, 105, 120), Color.FromRgb(70, 215, 215), Color.FromRgb(235, 220, 90), Color.FromRgb(200, 200, 210)
+    ];
+    private static readonly Pen[] ChannelPens = ChannelColors.Select(color => FrozenPen(color, 1.4)).ToArray();
+    private static Pen ChannelPen(int channel) => ChannelPens[channel % ChannelPens.Length];
 
     internal SignalMonitorView(string endpoint, string side, int channels, Color hue)
     {
@@ -546,7 +563,7 @@ internal sealed class SignalMonitorView : FrameworkElement
                 double y = top + (-_ballistics.Levels[c] / 60) * barHeight;
                 dc.DrawRectangle(TextBrush, null, new Rect(x - 1, y, barWidth + 2, 1.5));
             }
-            Text(dc, Labels[c], x + barWidth / 2, top + barHeight + 7, 9, MutedBrush, centered: true);
+            Text(dc, _labels[c], x + barWidth / 2, top + barHeight + 7, 9, MutedBrush, centered: true);
             Text(dc, ChannelLiveText(c), x + barWidth / 2, top + barHeight + 20, 8.5, TextBrush, 36, centered: true);
             Text(dc, ChannelPeakText(c), x + barWidth / 2, top + barHeight + 32, 8.5, RedBrush, 36, centered: true);
             Text(dc, "dBFS", x + barWidth / 2, top + barHeight + 44, 7.5, MutedBrush, centered: true);
@@ -572,19 +589,31 @@ internal sealed class SignalMonitorView : FrameworkElement
             Text(dc, hz >= 1000 ? $"{hz / 1000:0}k" : hz.ToString("0", CultureInfo.InvariantCulture),
                 Math.Clamp(x, plot.Left + 9, plot.Right - 9), plot.Bottom + 7, 9, MutedBrush, centered: true);
         }
-        var line = new StreamGeometry();
-        using (var context = line.Open())
+        // One curve per channel, each with its own color and a name tag (A1, A2 ...).
+        const int bins = SignalMonitorFrame.Bins;
+        for (int c = 0; c < _channels; ++c)
         {
-            for (int i = 0; i < _ballistics.Spectrum.Length; ++i)
+            var pen = _channels == 1 ? _spectrumPen : ChannelPen(c);
+            var line = new StreamGeometry();
+            using (var context = line.Open())
             {
-                var point = new Point(plot.X + i * plot.Width / (_ballistics.Spectrum.Length - 1),
-                    plot.Y + Math.Clamp(-_ballistics.Spectrum[i] / 90, 0, 1) * plot.Height);
-                if (i == 0) context.BeginFigure(point, false, false);
-                else context.LineTo(point, true, false);
+                for (int i = 0; i < bins; ++i)
+                {
+                    var point = new Point(plot.X + i * plot.Width / (bins - 1),
+                        plot.Y + Math.Clamp(-_ballistics.Spectrum[c * bins + i] / 90, 0, 1) * plot.Height);
+                    if (i == 0) context.BeginFigure(point, false, false);
+                    else context.LineTo(point, true, false);
+                }
+            }
+            line.Freeze();
+            dc.DrawGeometry(null, pen, line);
+            if (_channels > 1)
+            {
+                double tagX = plot.Right - 8 - (_channels - 1 - c) * 30;
+                dc.DrawRectangle(pen.Brush, null, new Rect(tagX - 24, plot.Top + 8, 8, 8));
+                Text(dc, _labels[c], tagX - 13, plot.Top + 5, 9, TextBrush, 26);
             }
         }
-        line.Freeze();
-        dc.DrawGeometry(null, _spectrumPen, line);
     }
 
     private void Text(DrawingContext dc, string value, double x, double y, double size, Brush brush,

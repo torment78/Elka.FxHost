@@ -15,13 +15,17 @@ public:
     std::mutex readerMutex;
     uint64_t previousSequence = 0;
 
-    void spectrum(float* destination)
+    // perChannel: destination holds SignalMonitorHub::Channels curves of Bins each (channel-major),
+    // one per monitored channel. Otherwise one combined curve (average channel power).
+    void spectrum(float* destination, bool perChannel = false)
     {
-        std::fill_n(destination, Bins, -90.0f);
+        const int curves = perChannel ? SignalMonitorHub::Channels : 1;
+        std::fill_n(destination, Bins * curves, -90.0f);
         const int samples = snapshot.sampleRate <= 96000 ? 2048 : SignalMonitorHub::Samples;
-        if (snapshot.sampleRate != spectrumRate || snapshot.channelCount != spectrumChannels)
+        if (snapshot.sampleRate != spectrumRate || snapshot.channelCount != spectrumChannels || perChannel != spectrumPerChannel)
         {
             hasSpectrum = false;
+            spectrumPerChannel = perChannel;
             spectrumRate = snapshot.sampleRate;
             spectrumChannels = snapshot.channelCount;
         }
@@ -31,22 +35,13 @@ public:
             // Do not manufacture a spectrum from spliced data or hold stale results indefinitely.
             if (hasSpectrum && snapshot.endFrame >= spectrumEndFrame &&
                 snapshot.endFrame - spectrumEndFrame <= static_cast<uint64_t>(std::max(0, spectrumRate) / 5))
-                std::copy(lastSpectrum.begin(), lastSpectrum.end(), destination);
+                std::copy_n(lastSpectrum.begin(), Bins * curves, destination);
             return;
         }
         auto& fft = samples == 2048 ? shortFft : longFft;
         auto& window = samples == 2048 ? shortWindow : longWindow;
-        power.fill(0);
-        for (int c = 0; c < snapshot.channelCount; ++c)
-        {
-            fftData.fill(0);
-            const auto& channel = snapshot.audio[static_cast<size_t>(c)];
-            std::copy_n(channel.begin() + snapshot.validSamples - samples, samples, fftData.begin());
-            window.multiplyWithWindowingTable(fftData.data(), samples);
-            fft.performFrequencyOnlyForwardTransform(fftData.data());
-            for (int i = 0; i <= samples / 2; ++i) power[static_cast<size_t>(i)] += fftData[static_cast<size_t>(i)] * fftData[static_cast<size_t>(i)];
-        }
         const double highest = std::min(20000.0, snapshot.sampleRate * 0.5);
+        auto bins = [&](float* curve, int averagedChannels) {
         for (int i = 0; i < Bins; ++i)
         {
             const double low = 20.0 * std::pow(1000.0, (i - 0.5) / (Bins - 1));
@@ -57,10 +52,34 @@ public:
             float maximum = 0;
             for (int bin = a; bin <= b; ++bin) maximum = std::max(maximum, power[static_cast<size_t>(bin)]);
             // JUCE's normalized Hann has unity average; average channel POWER, not samples (no phase cancellation).
-            const float amplitude = 2.0f * std::sqrt(maximum / snapshot.channelCount) / samples;
-            destination[i] = std::clamp(20.0f * std::log10(std::max(amplitude, 0.000001f)), -90.0f, 6.0f);
+            const float amplitude = 2.0f * std::sqrt(maximum / averagedChannels) / samples;
+            curve[i] = std::clamp(20.0f * std::log10(std::max(amplitude, 0.000001f)), -90.0f, 6.0f);
         }
-        std::copy_n(destination, Bins, lastSpectrum.begin());
+        };
+        auto transform = [&](int c) {
+            fftData.fill(0);
+            const auto& channel = snapshot.audio[static_cast<size_t>(c)];
+            std::copy_n(channel.begin() + snapshot.validSamples - samples, samples, fftData.begin());
+            window.multiplyWithWindowingTable(fftData.data(), samples);
+            fft.performFrequencyOnlyForwardTransform(fftData.data());
+            for (int i = 0; i <= samples / 2; ++i) power[static_cast<size_t>(i)] += fftData[static_cast<size_t>(i)] * fftData[static_cast<size_t>(i)];
+        };
+        if (perChannel)
+        {
+            for (int c = 0; c < snapshot.channelCount; ++c)
+            {
+                power.fill(0);
+                transform(c);
+                bins(destination + c * Bins, 1);
+            }
+        }
+        else
+        {
+            power.fill(0);
+            for (int c = 0; c < snapshot.channelCount; ++c) transform(c);
+            bins(destination, snapshot.channelCount);
+        }
+        std::copy_n(destination, Bins * curves, lastSpectrum.begin());
         spectrumEndFrame = snapshot.endFrame;
         hasSpectrum = true;
     }
@@ -71,9 +90,9 @@ private:
     juce::dsp::WindowingFunction<float> longWindow{SignalMonitorHub::Samples, juce::dsp::WindowingFunction<float>::hann};
     std::array<float, SignalMonitorHub::Samples * 2> fftData{};
     std::array<float, SignalMonitorHub::Samples / 2 + 1> power{};
-    std::array<float, Bins> lastSpectrum{};
+    std::array<float, Bins * SignalMonitorHub::Channels> lastSpectrum{};
     uint64_t spectrumEndFrame = 0;
     int spectrumRate = 0, spectrumChannels = 0;
-    bool hasSpectrum = false;
+    bool hasSpectrum = false, spectrumPerChannel = false;
 };
 }

@@ -107,10 +107,10 @@ internal sealed class SignalMonitorBallistics
     internal readonly double[] Levels = Enumerable.Repeat(-60.0, 8).ToArray();
     internal readonly double[] LiveLevels = Enumerable.Repeat(double.NaN, 8).ToArray();
     internal readonly double[] Peaks = Enumerable.Repeat(-60.0, 8).ToArray();
-    internal readonly double[] Spectrum = Enumerable.Repeat(-90.0, 120).ToArray();
+    internal readonly double[] Spectrum = Enumerable.Repeat(-90.0, SignalMonitorFrame.Bins * 8).ToArray();
     private readonly double[] _targets = Enumerable.Repeat(-60.0, 8).ToArray();
     private readonly double[] _unclampedTargets = Enumerable.Repeat(double.NegativeInfinity, 8).ToArray();
-    private readonly double[] _spectrumTargets = Enumerable.Repeat(-90.0, 120).ToArray();
+    private readonly double[] _spectrumTargets = Enumerable.Repeat(-90.0, SignalMonitorFrame.Bins * 8).ToArray();
     private readonly double[] _holdUntil = new double[8];
     private double _previousTime;
     internal double LastSignal { get; private set; } = double.NegativeInfinity;

@@ -62,8 +62,9 @@ public:
         int* sampleRate, unsigned long long* sequence)
     {
         const bool peaksOnly = spectrum == nullptr && spectrumCount == 0;
+        const bool perChannel = spectrumCount == SignalMonitorAnalyzer::Bins * SignalMonitorHub::Channels;
         if (!peaks || peakCount != SignalMonitorHub::Channels ||
-            (!peaksOnly && (!spectrum || spectrumCount != SignalMonitorAnalyzer::Bins)) ||
+            (!peaksOnly && (!spectrum || (spectrumCount != SignalMonitorAnalyzer::Bins && !perChannel))) ||
             !sampleRate || !sequence) return -1;
 
         std::unique_lock lock(mutex);
@@ -82,7 +83,7 @@ public:
         std::copy(analyzer.snapshot.peaks.begin(), analyzer.snapshot.peaks.end(), peaks);
         *sampleRate = analyzer.snapshot.sampleRate;
         *sequence = analyzer.snapshot.sequence;
-        if (!peaksOnly) analyzer.spectrum(spectrum);
+        if (!peaksOnly) analyzer.spectrum(spectrum, perChannel);
         return 0;
     }
 

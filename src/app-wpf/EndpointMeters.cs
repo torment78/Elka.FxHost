@@ -91,10 +91,40 @@ internal sealed class EndpointMeterReader : IDisposable
         }
     }
 
+    // Every mono meter on a 64/128-channel canvas would need its own native tap, and the
+    // engine only has a few. Meters therefore share one tap per 8-channel bank and side;
+    // each meter picks its channels out of the bank peaks.
+    private readonly record struct MeterBank(int Stream, bool OutputSide, int Bank);
+
     private void Read()
     {
-        var handles = new int[_addresses.Length];
-        var sequences = new ulong[_addresses.Length];
+        const int bankSize = 8;
+        var banks = new List<MeterBank>();
+        var bankIndex = new Dictionary<MeterBank, int>();
+        var meterBanks = new (int Bank, int Offset)[_addresses.Length][];
+        for (int i = 0; i < _addresses.Length; i++)
+        {
+            var address = _addresses[i];
+            int count = Math.Clamp(address.Channels, 1, 8);
+            meterBanks[i] = new (int, int)[count];
+            for (int k = 0; k < count; k++)
+            {
+                int channel = address.FirstChannel + k;
+                var key = new MeterBank(address.Stream, address.OutputSide, channel / bankSize);
+                if (!bankIndex.TryGetValue(key, out int b))
+                {
+                    b = banks.Count;
+                    banks.Add(key);
+                    bankIndex[key] = b;
+                }
+                meterBanks[i][k] = (b, channel % bankSize);
+            }
+        }
+
+        var handles = new int[banks.Count];
+        var sequences = new ulong[banks.Count];
+        var bankPeaks = banks.Select(_ => new float[8]).ToArray();
+        var bankFresh = new bool[banks.Count];
         var scratch = new float[8];
         var clock = Stopwatch.StartNew();
         double nextOpen = 0;
@@ -106,24 +136,42 @@ internal sealed class EndpointMeterReader : IDisposable
                 _pollPeakHolds?.Invoke();
                 bool retry = clock.Elapsed.TotalSeconds >= nextOpen;
                 if (retry) nextOpen = clock.Elapsed.TotalSeconds + 1;
-                for (int i = 0; i < handles.Length && !_lifetime.IsCancellationRequested; i++)
+                for (int b = 0; b < handles.Length && !_lifetime.IsCancellationRequested; b++)
                 {
-                    if (handles[i] == 0 && retry) handles[i] = _source.Open(_addresses[i]);
-                    if (handles[i] == 0) continue;
-                    int result = _source.Read(handles[i], scratch, out ulong sequence);
+                    bankFresh[b] = false;
+                    if (handles[b] == 0 && retry)
+                        handles[b] = _source.Open(new EndpointMeterAddress(banks[b].Stream, banks[b].OutputSide,
+                            banks[b].Bank * bankSize, bankSize));
+                    if (handles[b] == 0) continue;
+                    int result = _source.Read(handles[b], bankPeaks[b], out ulong sequence);
                     if (result < 0)
                     {
-                        _source.Close(handles[i]);
-                        handles[i] = 0;
-                        sequences[i] = 0;
+                        _source.Close(handles[b]);
+                        handles[b] = 0;
+                        sequences[b] = 0;
                         continue;
                     }
-                    if (result != 0 || sequence == sequences[i]) continue;
-                    sequences[i] = sequence;
+                    if (result != 0 || sequence == sequences[b]) continue;
+                    sequences[b] = sequence;
+                    bankFresh[b] = true;
+                }
+
+                for (int i = 0; i < _addresses.Length; i++)
+                {
+                    var map = meterBanks[i];
+                    bool fresh = false;
+                    Array.Clear(scratch);
+                    for (int k = 0; k < map.Length; k++)
+                    {
+                        if (!bankFresh[map[k].Bank]) continue;
+                        fresh = true;
+                        scratch[k] = bankPeaks[map[k].Bank][map[k].Offset];
+                    }
+                    if (!fresh) continue;
                     lock (_gate)
                     {
                         if (_discardNextFullScale[i]) _discardNextFullScale[i] = false;
-                        else _pendingFullScale[i] |= EndpointPeakState.ReachedFullScale(scratch.AsSpan(0, _addresses[i].Channels));
+                        else _pendingFullScale[i] |= EndpointPeakState.ReachedFullScale(scratch.AsSpan(0, map.Length));
                         for (int channel = 0; channel < 8; channel++)
                             _pending[i][channel] = Math.Max(_pending[i][channel], scratch[channel]);
                         _fresh[i] = true;

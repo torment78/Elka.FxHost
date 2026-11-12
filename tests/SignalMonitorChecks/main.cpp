@@ -294,7 +294,7 @@ int main()
         check(!hub.hasMonitors(), "No sessions at startup");
         hub.capture(0, false, nullptr, 0, 128, 48000);
         check(hub.open(3, false, 0, 2) == 0, "Reject invalid callback");
-        check(hub.open(0, false, 63, 8) == 0, "Reject invalid channel range");
+        check(hub.open(0, false, 121, 8) == 0, "Reject invalid channel range");
         const int raw = hub.open(0, false, 6, 2);
         const int processed = hub.open(0, true, 6, 2);
         const int bus = hub.open(1, false, 0, 8);

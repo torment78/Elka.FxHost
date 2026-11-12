@@ -17,7 +17,7 @@ class SignalMonitorHub
 public:
     static constexpr int Channels = 8;
     static constexpr int Samples = 4096;
-    static constexpr int Capacity = 32;
+    static constexpr int Capacity = 64;
     struct Snapshot
     {
         int sampleRate = 0;
@@ -63,7 +63,7 @@ public:
             acquire(slot);
             slot.session = std::move(session);
             slot.busy.clear(std::memory_order_release);
-            active.fetch_or(uint32_t{1} << i, std::memory_order_release);
+            active.fetch_or(uint64_t{1} << i, std::memory_order_release);
             return id;
         }
         return 0;
@@ -75,7 +75,7 @@ public:
         {
             auto& slot = slots[static_cast<size_t>(i)];
             if (!slot.session || slot.session->id != id) continue;
-            active.fetch_and(~(uint32_t{1} << i), std::memory_order_release);
+            active.fetch_and(~(uint64_t{1} << i), std::memory_order_release);
             acquire(slot);
             slot.session.reset();
             slot.busy.clear(std::memory_order_release);
@@ -116,7 +116,7 @@ public:
 
     void capture(int stream, bool output, float* const* channels, int channelCount, int frames, int rate) noexcept
     {
-        uint32_t mask = active.load(std::memory_order_acquire);
+        uint64_t mask = active.load(std::memory_order_acquire);
         if (!mask || frames <= 0 || rate <= 0 || stream < 0 || stream > 2) return;
         // Advance even when a busy display reader causes a tap copy to be skipped.
         // Each source/destination stream has its own sample clock; this is metadata only.
@@ -190,7 +190,7 @@ private:
     std::array<Slot, Capacity> slots;
     static_assert(std::atomic<uint64_t>::is_always_lock_free);
     std::array<std::atomic<uint64_t>, 6> clocks{};
-    std::atomic<uint32_t> active{0};
+    std::atomic<uint64_t> active{0};
     int nextId = 1;
 };
 }

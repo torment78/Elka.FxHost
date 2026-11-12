@@ -36,6 +36,9 @@ internal sealed class SignalMonitorHistoryRenderer
     internal IReadOnlyList<Rect> LabelBounds => _labelBounds;
     private readonly List<Rect> _labelBounds = [];
 
+    private string[]? _names;
+    internal void SetChannelNames(string[] names) => _names = names;
+
     internal SignalMonitorHistoryRenderer(int channels)
     {
         _channels = Math.Clamp(channels, 1, 8);
@@ -112,7 +115,7 @@ internal sealed class SignalMonitorHistoryRenderer
         dc.DrawImage(_bitmap, area);
         _labelBounds.Clear();
         for (int c = 0; c < _channels; c++)
-            Label(dc, c == 0 ? "L" : c == 1 ? "R" : (c + 1).ToString(CultureInfo.InvariantCulture),
+            Label(dc, _names is { } names && c < names.Length ? names[c] : c == 0 ? "L" : c == 1 ? "R" : (c + 1).ToString(CultureInfo.InvariantCulture),
                 WorldLogical((c - (_channels - 1) / 2.0) * LaneWidth, 0, 0.9), false);
         ReadOnlySpan<int> ages = seconds == 10 ? [0, 1, 2, 4, 10] : seconds == 15 ? [0, 1, 3, 6, 15] : [0, 2, 5, 10, 30];
         var nearRail = WorldLogical(-HalfSpan, 0, 0);
