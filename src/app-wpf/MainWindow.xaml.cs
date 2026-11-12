@@ -10939,13 +10939,6 @@ private void RefreshEndpointButtonSelection()
 
     private void DrawDefaultPassthroughConnections()
     {
-        // FX Host has no dry path: FX In never reaches FX Out unless a line is drawn,
-        // so there are no default pass-through markers to show.
-        if (FxHostEdition.AsioOnly)
-        {
-            return;
-        }
-
         var leftMode = CanvasEndpointMode(outputSide: false);
         var rightMode = CanvasEndpointMode(outputSide: true);
         if (leftMode != rightMode)
@@ -10953,7 +10946,8 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        // One dry pass-through marker per ASIO channel (32 / 64 / up to 128).
+        // One dotted guide per ASIO channel (32 / 64 / up to 128). Visual only: no audio
+        // flows from FX In to FX Out until a real line is drawn.
         var maxChannel = FxHostEdition.ChannelCount;
 
         for (var channel = 0; channel < maxChannel; channel++)
