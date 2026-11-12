@@ -179,6 +179,27 @@ internal static class FxHostEdition
         return removed;
     }
 
+    /// <summary>Removes the given channels from a linked node. Fewer than two left = fully unlinked.</summary>
+    public static bool RemoveFromLink(bool outputSide, IoEndpoint endpoint, IReadOnlyList<int> remove, out string message)
+    {
+        var side = outputSide ? "FX Out" : "FX In";
+        var index = SideIndex(outputSide);
+        var members = endpoint.Range.Channels.ToHashSet();
+        var link = Links[index].FirstOrDefault(candidate => members.SetEquals(candidate));
+        message = string.Empty;
+        if (link is null || remove.Count == 0) return false;
+
+        var kept = link.Where(channel => !remove.Contains(channel)).ToArray();
+        Links[index].Remove(link);
+        if (kept.Length >= 2) Links[index].Add(kept);
+        SideCache[index] = null;
+        var removed = string.Join(", ", link.Where(remove.Contains).Select(ChannelShortName));
+        message = kept.Length >= 2
+            ? $"Unlinked {side} {removed} from {LinkedEndpointName(link)[3..]}; {LinkedEndpointName(kept)[3..]} stays linked."
+            : $"Unlinked {side} {LinkedEndpointName(link)[3..]} into mono nodes.";
+        return true;
+    }
+
     /// <summary>Left side shows what Matrix sends in, right side what goes back out.</summary>
     public static string SideName(string endpointName, bool outputSide) =>
         endpointName.StartsWith("FX ", StringComparison.Ordinal)

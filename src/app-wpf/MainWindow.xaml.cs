@@ -3494,7 +3494,13 @@ private void RefreshEndpointButtonSelection()
         menu.Items.Add(CreateNodeMenuItem("Hotkey", () => ShowEditorHotkeys(this, selectedEndpoint: hotkeyTarget)));
         menu.Items.Add(CreateNodeMenuItem("Select Section", () => SelectCanvasEndpoint(mode, endpoint)));
         if (endpoint.ChannelCount > 1)
-            menu.Items.Add(CreateNodeMenuItem("Unlink Channels", () => UnlinkChannels(endpoint, outputSide)));
+            AddPickListSubmenu(menu, "Unlink Channels",
+                endpoint.Range.Channels.Select(channel => (FxHostEdition.ChannelName(channel, outputSide), channel)).ToList(),
+                picked => UnlinkPickedChannels(endpoint, outputSide, picked));
+        var cables = EndpointCableConnections(mode, endpoint, outputSide);
+        AddPickListSubmenu(menu, "Disconnect Cables",
+            cables.Select(connection => (CanvasConnectionLabel(connection), connection)).ToList(),
+            DisconnectCanvasConnections);
         menu.Items.Add(new Separator());
 
         if (CanChangeEndpointPinMode(endpoint))
@@ -3563,13 +3569,11 @@ private void RefreshEndpointButtonSelection()
             return menu;
         }
 
-        var disconnectMenu = new MenuItem { Header = "Disconnect Cable" };
-        foreach (var connection in connections)
-        {
-            disconnectMenu.Items.Add(CreateNodeMenuItem(CanvasConnectionLabel(connection), () => DisconnectCanvasConnection(connection)));
-        }
-
-        menu.Items.Add(disconnectMenu);
+        // FX In / FX Out node pins already carry the node's own "Disconnect Cables" list.
+        if (!menu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "Disconnect Cables")))
+            AddPickListSubmenu(menu, "Disconnect Cables",
+                connections.Select(connection => (CanvasConnectionLabel(connection), connection)).ToList(),
+                DisconnectCanvasConnections);
         return menu;
     }
 
