@@ -8,7 +8,15 @@ Matrix  ──►  "FX In A1…P8"   (driver outputs)  ──►  FX Host canvas
 Matrix  ◄──  "FX Out A1…P8"  (driver inputs)   ◄──  anything wired to the right side
 ```
 
-It is based on Elka FX Host and keeps its canvas, VST hosting, groups,
+## Download
+
+Get the latest installer (`ElkaFxHostSetup-v….exe`) from
+[Releases](https://github.com/torment78/Elka.FxHost/releases). Development builds are
+marked *Pre-release* and are unsigned. After installing, restart VB-Audio Matrix once so it
+picks up the "Elka FX Host" ASIO device, then set **ASIO Link > Buffer size** to match Matrix.
+FX Host checks this page for newer builds from its update menu.
+
+It is based on Elka VoiceMeeter FX Host and keeps its canvas, VST hosting, groups,
 sandboxed plugins, signal monitor, DSP diagnostics and save/load. The VoiceMeeter Remote
 API, the VoiceMeeter callback, ASIO Patch / Patch.insert and the delay workspace are
 **removed**. The only audio path is the Elka FX Host ASIO driver.
