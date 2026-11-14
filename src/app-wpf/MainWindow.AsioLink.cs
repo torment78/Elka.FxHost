@@ -76,6 +76,7 @@ public partial class MainWindow
 
         var status = _engine.AsioLinkStatus();
         if (AsioLinkStatusTextBlock.Text != status) AsioLinkStatusTextBlock.Text = status;
+        RefreshAsioClockStatus();
     }
 
     /// <summary>
@@ -157,6 +158,7 @@ public partial class MainWindow
         });
         AsioLinkOptionsPanel.Children.Add(combo);
         _asioChannelCountComboBox = combo;
+        AddAsioClockControls();
     }
 
     private void AsioChannelCountComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

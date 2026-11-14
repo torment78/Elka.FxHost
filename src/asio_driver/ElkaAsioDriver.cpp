@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "asio_driver/AsioSdk.h"
+#include "asio_driver/DeviceClockFollower.h"
 #include "asio_driver/ElkaAsioIds.h"
 #include "matrix_link/MatrixLinkProtocol.h"
 
@@ -48,6 +49,18 @@ DWORD readSettingDword(const wchar_t* name, DWORD fallback) noexcept
     if (RegGetValueW(HKEY_LOCAL_MACHINE, ml::SettingsKey, name, RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS)
         return value;
     return fallback;
+}
+
+std::wstring readSettingString(const wchar_t* name) noexcept
+{
+    for (HKEY hive : { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE })
+    {
+        wchar_t value[512] {};
+        DWORD size = sizeof(value);
+        if (RegGetValueW(hive, ml::SettingsKey, name, RRF_RT_REG_SZ, nullptr, value, &size) == ERROR_SUCCESS)
+            return value;
+    }
+    return {};
 }
 
 void copyName(char* destination, size_t capacity, const std::string& text) noexcept
@@ -170,8 +183,7 @@ public:
         parentWindow = static_cast<HWND>(sysHandle);
         channels = ml::sanitizeChannelCount(static_cast<int>(readSettingDword(ml::ChannelCountValue, ml::DefaultChannels)));
         useInt32 = readSettingDword(L"UseInt32Samples", 0) != 0;
-        preferredBufferSize = std::clamp(static_cast<long>(readSettingDword(L"PreferredBufferSize", DefaultPreferredBufferSize)),
-                                         MinBufferSize, MaxBufferSize);
+        preferredBufferSize.store(readBufferSizeSetting());
         if (!link.open())
             setError("Shared memory unavailable; the driver will output silence.");
         else
@@ -226,6 +238,7 @@ public:
             driver.streaming.store(1, std::memory_order_release);
         }
 
+        startClockFollower();
         running.store(true);
         clockThread = std::thread([this] { clockLoop(); });
         return ASE_OK;
@@ -243,8 +256,12 @@ public:
             else
                 clockThread.join();
         }
+        follower.stop();
         if (link.header != nullptr && ownsLink)
+        {
             link.header->driver.streaming.store(0, std::memory_order_release);
+            link.header->clock.followState.store(ml::ClockOff, std::memory_order_release);
+        }
         return ASE_OK;
     }
 
@@ -259,7 +276,7 @@ public:
 
     ASIOError getLatencies(long* inputLatency, long* outputLatency) override
     {
-        const long block = activeBufferSize > 0 ? activeBufferSize : preferredBufferSize;
+        const long block = activeBufferSize > 0 ? activeBufferSize : preferredBufferSize.load();
         if (inputLatency != nullptr)
             *inputLatency = block;
         if (outputLatency != nullptr)
@@ -271,7 +288,7 @@ public:
     {
         if (minSize != nullptr) *minSize = MinBufferSize;
         if (maxSize != nullptr) *maxSize = MaxBufferSize;
-        if (preferredSize != nullptr) *preferredSize = preferredBufferSize;
+        if (preferredSize != nullptr) *preferredSize = preferredBufferSize.load();
         if (granularity != nullptr) *granularity = -1; // powers of two
         return ASE_OK;
     }
@@ -310,7 +327,7 @@ public:
         clocks[0].associatedChannel = -1;
         clocks[0].associatedGroup = -1;
         clocks[0].isCurrentSource = ASIOTrue;
-        copyName(clocks[0].name, 32, "Internal");
+        copyName(clocks[0].name, 32, clockMode == 1 ? "Device clock (FX Host)" : "Internal");
         *numSources = 1;
         return ASE_OK;
     }
@@ -396,14 +413,20 @@ public:
     {
         const bool hostAlive = link.header != nullptr &&
             ml::isAlive(link.header->host.heartbeatMs.load(), GetTickCount64());
+        if (hostAlive)
+        {
+            // FX Host shows its ASIO settings (buffer size, clock, channels) and comes to front.
+            link.header->clock.controlPanelRequests.fetch_add(1, std::memory_order_acq_rel);
+            return ASE_OK;
+        }
         const std::wstring text =
             L"Elka FX Host virtual ASIO driver\n\n"
             L"Channels: " + std::to_wstring(channels) + L" in / " + std::to_wstring(channels) + L" out (banks A-" +
             std::wstring(1, static_cast<wchar_t>(L'A' + (channels / ml::ChannelStep) - 1)) + L")\n"
             L"Sample rate: " + std::to_wstring(static_cast<int>(sampleRate)) + L" Hz\n"
-            L"Buffer: " + std::to_wstring(activeBufferSize > 0 ? activeBufferSize : preferredBufferSize) + L" samples\n"
+            L"Buffer: " + std::to_wstring(activeBufferSize > 0 ? activeBufferSize : preferredBufferSize.load()) + L" samples\n"
             L"FX Host app: " + (hostAlive ? std::wstring(L"connected") : std::wstring(L"not running (inputs are silent)")) +
-            L"\n\nChange the channel count (32 / 64 / 128) in FX Host settings.";
+            L"\n\nStart FX Host to change the buffer size, clock and channel count.";
         MessageBoxW(parentWindow, text.c_str(), L"Elka FX Host ASIO", MB_OK | MB_ICONINFORMATION);
         return ASE_OK;
     }
@@ -458,13 +481,12 @@ private:
 
         while (running.load(std::memory_order_acquire))
         {
-            long long period = periodTicks.load(std::memory_order_relaxed);
-            if (period <= 0)
-            {
-                period = static_cast<long long>(std::llround(
-                    static_cast<double>(frequency.QuadPart) * static_cast<double>(activeBufferSize) / sampleRate));
-                periodTicks.store(period, std::memory_order_relaxed);
-            }
+            // One block of PC-timer time, shortened or lengthened by the followed device's
+            // clock ratio so blocks arrive at the master device's real rate (no drift).
+            const double ratio = clockMode == 1 ? follower.ratio() : 1.0;
+            const long long period = static_cast<long long>(std::llround(
+                static_cast<double>(frequency.QuadPart) * static_cast<double>(activeBufferSize) / (sampleRate * ratio)));
+            periodTicks.store(period, std::memory_order_relaxed);
 
             nextDeadline += period;
             waitUntil(timer, nextDeadline, frequency.QuadPart);
@@ -520,6 +542,7 @@ private:
             postRequest(header, previous, block);
             readResponse(header, index, block, nowMs);
             checkResetRequest(header);
+            publishClockState(header);
         }
         else
         {
@@ -651,8 +674,19 @@ private:
         if (generation == observedResetGeneration)
             return;
         observedResetGeneration = generation;
+
+        // Clock source changes apply live; no reset needed.
+        const int wantedClockMode = readSettingDword(ml::ClockSourceValue, 0) == 1 ? 1 : 0;
+        const std::wstring wantedDevice = wantedClockMode == 1 ? readSettingString(ml::ClockDeviceIdValue) : std::wstring();
+        if (wantedClockMode != clockMode || wantedDevice != clockDeviceId)
+            startClockFollower();
+
+        // Channel count and buffer size need the host to rebuild its buffers.
         const int wanted = ml::sanitizeChannelCount(static_cast<int>(readSettingDword(ml::ChannelCountValue, ml::DefaultChannels)));
-        if (wanted != channels && resetSupported && callbacks->asioMessage != nullptr)
+        const long wantedBuffer = readBufferSizeSetting();
+        preferredBufferSize.store(wantedBuffer);
+        header->clock.preferredBufferSize.store(static_cast<int32_t>(wantedBuffer), std::memory_order_release);
+        if ((wanted != channels || wantedBuffer != activeBufferSize) && resetSupported && callbacks->asioMessage != nullptr)
             callbacks->asioMessage(kAsioResetRequest, 0, nullptr, nullptr);
     }
 
@@ -660,9 +694,41 @@ private:
     HWND parentWindow = nullptr;
     SharedLink link;
     bool ownsLink = false; // true once this instance has started streaming
+    elka::asio::DeviceClockFollower follower;
+    int clockMode = 0;          // 0 internal (PC timer), 1 follow a device's clock
+    std::wstring clockDeviceId; // WASAPI endpoint id; empty = default output device
+
+    static long readBufferSizeSetting() noexcept
+    {
+        return ml::sanitizeBufferSize(static_cast<int>(readSettingDword(ml::BufferSizeValue, DefaultPreferredBufferSize)));
+    }
+
+    void startClockFollower()
+    {
+        clockMode = readSettingDword(ml::ClockSourceValue, 0) == 1 ? 1 : 0;
+        clockDeviceId = clockMode == 1 ? readSettingString(ml::ClockDeviceIdValue) : std::wstring();
+        follower.stop();
+        if (clockMode == 1)
+            follower.start(clockDeviceId);
+        if (link.header != nullptr && ownsLink)
+        {
+            link.header->clock.mode.store(clockMode, std::memory_order_release);
+            link.header->clock.preferredBufferSize.store(static_cast<int32_t>(preferredBufferSize.load()), std::memory_order_release);
+        }
+    }
+
+    // Called from the clock thread once per block: publish what the follower reports.
+    void publishClockState(ml::LinkHeader* header) noexcept
+    {
+        const double ratio = clockMode == 1 ? follower.ratio() : 1.0;
+        header->clock.mode.store(clockMode, std::memory_order_relaxed);
+        header->clock.followState.store(clockMode == 1 ? static_cast<int32_t>(follower.state()) : ml::ClockOff,
+                                        std::memory_order_relaxed);
+        header->clock.partsPerBillion.store(static_cast<int32_t>(std::llround((ratio - 1.0) * 1e9)), std::memory_order_relaxed);
+    }
     int channels = ml::DefaultChannels;
     bool useInt32 = false;
-    long preferredBufferSize = DefaultPreferredBufferSize;
+    std::atomic<long> preferredBufferSize { DefaultPreferredBufferSize }; // read by the host thread, updated by the clock thread
     long activeBufferSize = 0;
     double sampleRate = 48000.0;
     ASIOCallbacks* callbacks = nullptr;

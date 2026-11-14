@@ -75,6 +75,108 @@ bool MatrixLinkHost::setConfiguredChannelCount(int requested, std::wstring& stat
     return true;
 }
 
+// Writes one driver setting (HKCU) and asks the streaming driver to re-read its settings.
+bool MatrixLinkHost::writeSettingsAndSignal(const wchar_t* name, unsigned long type, const void* data, unsigned long bytes)
+{
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, ml::SettingsKey, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr) != ERROR_SUCCESS)
+        return false;
+    const bool ok = RegSetValueExW(key, name, 0, type, static_cast<const BYTE*>(data), bytes) == ERROR_SUCCESS;
+    RegCloseKey(key);
+    if (!ok)
+        return false;
+
+    std::lock_guard lock(mutex);
+    std::wstring ignored;
+    if (openMapping(ignored))
+        header->host.resetGeneration.fetch_add(1, std::memory_order_acq_rel);
+    return true;
+}
+
+int MatrixLinkHost::configuredBufferSize() noexcept
+{
+    for (HKEY hive : { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE })
+    {
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        if (RegGetValueW(hive, ml::SettingsKey, ml::BufferSizeValue, RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS)
+            return ml::sanitizeBufferSize(static_cast<int>(value));
+    }
+    return ml::DefaultBufferSize;
+}
+
+bool MatrixLinkHost::setConfiguredBufferSize(int samples, std::wstring& status)
+{
+    const DWORD value = static_cast<DWORD>(ml::sanitizeBufferSize(samples));
+    if (!writeSettingsAndSignal(ml::BufferSizeValue, REG_DWORD, &value, sizeof(value)))
+    {
+        status = L"Could not save the ASIO buffer size.";
+        return false;
+    }
+    status = L"ASIO buffer size set to " + std::to_wstring(value) +
+        L" samples. Matrix resets the device to use it; if it does not, restart the device in Matrix.";
+    return true;
+}
+
+int MatrixLinkHost::configuredClockSource(std::wstring& deviceId)
+{
+    deviceId.clear();
+    int mode = 0;
+    for (HKEY hive : { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE })
+    {
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        if (RegGetValueW(hive, ml::SettingsKey, ml::ClockSourceValue, RRF_RT_REG_DWORD, nullptr, &value, &size) == ERROR_SUCCESS)
+        {
+            mode = value == 1 ? 1 : 0;
+            wchar_t id[512] {};
+            DWORD idSize = sizeof(id);
+            if (RegGetValueW(hive, ml::SettingsKey, ml::ClockDeviceIdValue, RRF_RT_REG_SZ, nullptr, id, &idSize) == ERROR_SUCCESS)
+                deviceId = id;
+            break;
+        }
+    }
+    return mode;
+}
+
+bool MatrixLinkHost::setConfiguredClockSource(int mode, const std::wstring& deviceId, std::wstring& status)
+{
+    // Device id first: the driver reads both when it sees the change signal.
+    const DWORD idBytes = static_cast<DWORD>((deviceId.size() + 1) * sizeof(wchar_t));
+    const DWORD value = mode == 1 ? 1u : 0u;
+    HKEY key = nullptr;
+    bool ok = RegCreateKeyExW(HKEY_CURRENT_USER, ml::SettingsKey, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr) == ERROR_SUCCESS;
+    if (ok)
+    {
+        ok = RegSetValueExW(key, ml::ClockDeviceIdValue, 0, REG_SZ, reinterpret_cast<const BYTE*>(deviceId.c_str()), idBytes) == ERROR_SUCCESS;
+        RegCloseKey(key);
+    }
+    if (!ok || !writeSettingsAndSignal(ml::ClockSourceValue, REG_DWORD, &value, sizeof(value)))
+    {
+        status = L"Could not save the ASIO clock setting.";
+        return false;
+    }
+    status = mode == 1 ? L"ASIO clock: following the selected device's clock." : L"ASIO clock: internal (PC timer).";
+    return true;
+}
+
+MatrixLinkHost::ClockStatus MatrixLinkHost::clockStatus() const noexcept
+{
+    ClockStatus result;
+    std::lock_guard lock(mutex);
+    if (header == nullptr)
+        return result;
+    result.driverPresent = header->driver.streaming.load(std::memory_order_acquire) != 0 &&
+        ml::isAlive(header->driver.heartbeatMs.load(std::memory_order_acquire), GetTickCount64());
+    result.mode = header->clock.mode.load(std::memory_order_relaxed);
+    result.followState = header->clock.followState.load(std::memory_order_relaxed);
+    result.partsPerBillion = header->clock.partsPerBillion.load(std::memory_order_relaxed);
+    result.preferredBufferSize = header->clock.preferredBufferSize.load(std::memory_order_relaxed);
+    result.activeBufferSize = header->driver.blockSize.load(std::memory_order_relaxed);
+    result.controlPanelRequests = header->clock.controlPanelRequests.load(std::memory_order_relaxed);
+    return result;
+}
+
 bool MatrixLinkHost::isDriverRegistered() const noexcept
 {
     HKEY key = nullptr;

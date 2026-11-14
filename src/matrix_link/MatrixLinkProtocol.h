@@ -37,6 +37,19 @@ constexpr wchar_t RequestEventName[] = L"Local\\ElkaFxHost.MatrixLink.v1.Request
 // Per-user settings shared by the driver, the app and the installer.
 constexpr wchar_t SettingsKey[] = L"Software\\ElkaSoft\\FxHost\\Asio";
 constexpr wchar_t ChannelCountValue[] = L"ChannelCount";
+constexpr wchar_t BufferSizeValue[] = L"PreferredBufferSize";   // DWORD, power of two 32..2048
+constexpr wchar_t ClockSourceValue[] = L"ClockSource";          // DWORD: 0 internal, 1 follow device
+constexpr wchar_t ClockDeviceIdValue[] = L"ClockDeviceId";      // REG_SZ: WASAPI endpoint id
+
+constexpr int MinBufferSize = 32;
+constexpr int DefaultBufferSize = 256;
+
+// Clock follower states published by the driver (ClockState::followState).
+constexpr int ClockOff = 0;
+constexpr int ClockMeasuring = 1;
+constexpr int ClockLocked = 2;
+constexpr int ClockDeviceNotFound = 3;
+constexpr int ClockDeviceUnavailable = 4;
 
 constexpr char DriverName[] = "Elka FX Host";
 
@@ -74,6 +87,18 @@ struct alignas(64) HostState
     std::atomic<int32_t> resetGeneration;    // bump to make the driver ask its host to reset
 };
 
+// Added after version 1 shipped. It sits after the slot headers, inside the same
+// 4096-byte header page, so a driver and app from different builds still agree on
+// every older field; an older driver simply leaves this zeroed.
+struct alignas(64) ClockState
+{
+    std::atomic<int32_t> mode;                // driver: 0 internal, 1 following a device
+    std::atomic<int32_t> followState;         // driver: Clock* constant above
+    std::atomic<int32_t> partsPerBillion;     // driver: device clock vs PC timer, (ratio - 1) * 1e9
+    std::atomic<int32_t> preferredBufferSize; // driver: buffer size it offers the host
+    std::atomic<int32_t> controlPanelRequests;// driver: bumped when the host's ASIO panel button is used
+};
+
 struct alignas(4096) LinkHeader
 {
     uint32_t magic;
@@ -84,7 +109,18 @@ struct alignas(4096) LinkHeader
     HostState host;
     SlotHeader toFx[RingSlots];   // driver -> FX Host (what Matrix sends to "FX In")
     SlotHeader fromFx[RingSlots]; // FX Host -> driver (what Matrix receives from "FX Out")
+    ClockState clock;
 };
+
+static_assert(sizeof(LinkHeader) == 4096, "the header must stay one page so audio offsets never move");
+
+inline int sanitizeBufferSize(int requested) noexcept
+{
+    int size = MinBufferSize;
+    while (size < requested && size < MaxBlockSize)
+        size *= 2;
+    return size;
+}
 
 constexpr size_t SlotFloats = static_cast<size_t>(MaxChannels) * MaxBlockSize;
 constexpr size_t AudioBytesPerDirection = SlotFloats * RingSlots * sizeof(float);

@@ -49,6 +49,26 @@ public:
     static int configuredChannelCount() noexcept;
     bool setConfiguredChannelCount(int channels, std::wstring& status);
     bool isDriverRegistered() const noexcept;
+
+    // Buffer size the driver offers its host (Matrix uses the driver's preferred size).
+    static int configuredBufferSize() noexcept;
+    bool setConfiguredBufferSize(int samples, std::wstring& status);
+
+    // Clock: 0 = internal (PC timer), 1 = follow the clock of a Windows audio device.
+    static int configuredClockSource(std::wstring& deviceId);
+    bool setConfiguredClockSource(int mode, const std::wstring& deviceId, std::wstring& status);
+
+    struct ClockStatus
+    {
+        bool driverPresent = false; // a driver is streaming and publishing clock state
+        int mode = 0;
+        int followState = 0;
+        int partsPerBillion = 0;
+        int preferredBufferSize = 0;
+        int activeBufferSize = 0;
+        int controlPanelRequests = 0;
+    };
+    ClockStatus clockStatus() const noexcept;
     bool isDriverStreaming() const noexcept;
     int driverChannelCount() const noexcept;
     unsigned long long missedBlocks() const noexcept;
@@ -56,6 +76,7 @@ public:
 private:
     bool openMapping(std::wstring& status);
     void closeMapping() noexcept;
+    bool writeSettingsAndSignal(const wchar_t* name, unsigned long type, const void* data, unsigned long bytes);
     void serviceLoop() noexcept;
     void prepareLoop() noexcept;
     void processBlock(long long sequence) noexcept;

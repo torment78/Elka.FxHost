@@ -70,6 +70,10 @@ internal sealed record ChannelRange(int Start, int End)
     public override int GetHashCode() => HashCode.Combine(Start, End, Members?.Count ?? 0);
 }
 
+/// <summary>What the Elka FX Host ASIO driver reports about its clock and buffer.</summary>
+internal sealed record AsioClockStatus(bool DriverPresent, int Mode, int FollowState, int PartsPerBillion,
+    int PreferredBufferSize, int ActiveBufferSize, int ControlPanelRequests);
+
 internal sealed record IoEndpoint(string Name, ChannelRange Range)
 {
     public int ChannelCount => Range.Count;
@@ -1344,6 +1348,53 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
         return status.ToString();
     }
 
+    public int AsioBufferSize => _attached ? ElkaFx_GetAsioBufferSize() : 256;
+
+    public string SetAsioBufferSize(int samples)
+    {
+        if (!_attached) return _lastStatus;
+        var status = new StringBuilder(512);
+        ElkaFx_SetAsioBufferSize(samples, status, status.Capacity);
+        return status.ToString();
+    }
+
+    /// <summary>0 = internal (PC timer), 1 = follow a Windows audio device's clock.</summary>
+    public int AsioClockSource(out string deviceId)
+    {
+        var id = new StringBuilder(512);
+        var mode = _attached ? ElkaFx_GetAsioClockSource(id, id.Capacity) : 0;
+        deviceId = id.ToString();
+        return mode;
+    }
+
+    public string SetAsioClockSource(int mode, string deviceId)
+    {
+        if (!_attached) return _lastStatus;
+        var status = new StringBuilder(512);
+        ElkaFx_SetAsioClockSource(mode, deviceId, status, status.Capacity);
+        return status.ToString();
+    }
+
+    public AsioClockStatus? AsioClockStatusSnapshot()
+    {
+        if (!_attached) return null;
+        var values = new int[7];
+        if (ElkaFx_GetAsioClockStatus(values, values.Length) != 0) return null;
+        return new AsioClockStatus(values[0] != 0, values[1], values[2], values[3], values[4], values[5], values[6]);
+    }
+
+    public IReadOnlyList<(string Id, string Name)> AudioOutputDevices()
+    {
+        if (!_attached) return [];
+        var buffer = new StringBuilder(32768);
+        ElkaFx_ListAudioOutputDevices(buffer, buffer.Capacity);
+        return buffer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split('\t'))
+            .Where(parts => parts.Length == 2)
+            .Select(parts => (parts[0], parts[1]))
+            .ToList();
+    }
+
     public void ApplyOutputBoosts(IReadOnlyDictionary<(int Stream, int Channel), int> desired)
     {
         if (!_attached) return;
@@ -2231,6 +2282,24 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
     private static extern int ElkaFx_SetAsioChannelCount(int channels, StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_GetAsioBufferSize();
+
+    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_SetAsioBufferSize(int samples, StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_GetAsioClockSource(StringBuilder deviceId, int deviceIdChars);
+
+    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_SetAsioClockSource(int mode, string deviceId, StringBuilder status, int statusChars);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_GetAsioClockStatus([Out] int[] values, int count);
+
+    [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int ElkaFx_ListAudioOutputDevices(StringBuilder buffer, int bufferChars);
 
     [DllImport(DllName, CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
     private static extern int ElkaFx_Initialize(StringBuilder status, int statusChars);

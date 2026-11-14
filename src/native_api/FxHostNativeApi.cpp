@@ -1393,6 +1393,112 @@ __declspec(dllexport) int __cdecl ElkaFx_IsAsioDriverStreaming()
     return g_host && g_host->asioLink.isDriverStreaming() ? 1 : 0;
 }
 
+__declspec(dllexport) int __cdecl ElkaFx_GetAsioBufferSize()
+{
+    return MatrixLinkHost::configuredBufferSize();
+}
+
+__declspec(dllexport) int __cdecl ElkaFx_SetAsioBufferSize(int samples, wchar_t* status, int statusChars)
+{
+    try
+    {
+        std::lock_guard lock(g_mutex);
+        std::wstring message;
+        const bool ok = host().asioLink.setConfiguredBufferSize(samples, message);
+        writeWide(message, status, statusChars);
+        return ok ? 0 : -1;
+    }
+    catch (...) { return -1; }
+}
+
+__declspec(dllexport) int __cdecl ElkaFx_GetAsioClockSource(wchar_t* deviceId, int deviceIdChars)
+{
+    try
+    {
+        std::wstring id;
+        const int mode = MatrixLinkHost::configuredClockSource(id);
+        writeWide(id, deviceId, deviceIdChars);
+        return mode;
+    }
+    catch (...) { return 0; }
+}
+
+__declspec(dllexport) int __cdecl ElkaFx_SetAsioClockSource(int mode, const wchar_t* deviceId, wchar_t* status, int statusChars)
+{
+    try
+    {
+        std::lock_guard lock(g_mutex);
+        std::wstring message;
+        const bool ok = host().asioLink.setConfiguredClockSource(mode, deviceId != nullptr ? deviceId : L"", message);
+        writeWide(message, status, statusChars);
+        return ok ? 0 : -1;
+    }
+    catch (...) { return -1; }
+}
+
+// values[0..6]: driverPresent, mode, followState, partsPerBillion, preferredBuffer, activeBuffer, controlPanelRequests
+__declspec(dllexport) int __cdecl ElkaFx_GetAsioClockStatus(int* values, int count)
+{
+    if (values == nullptr || count < 7)
+        return -1;
+    std::lock_guard lock(g_mutex);
+    const auto status = host().asioLink.clockStatus();
+    values[0] = status.driverPresent ? 1 : 0;
+    values[1] = status.mode;
+    values[2] = status.followState;
+    values[3] = status.partsPerBillion;
+    values[4] = status.preferredBufferSize;
+    values[5] = status.activeBufferSize;
+    values[6] = status.controlPanelRequests;
+    return 0;
+}
+
+// Active Windows playback devices, one per line: "endpoint id<TAB>friendly name".
+__declspec(dllexport) int __cdecl ElkaFx_ListAudioOutputDevices(wchar_t* buffer, int bufferChars)
+{
+    std::wstring text;
+    int count = 0;
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IMMDeviceEnumerator* enumerator = nullptr;
+    IMMDeviceCollection* devices = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+            reinterpret_cast<void**>(&enumerator))) &&
+        SUCCEEDED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices)))
+    {
+        UINT total = 0;
+        devices->GetCount(&total);
+        for (UINT index = 0; index < total; ++index)
+        {
+            IMMDevice* device = nullptr;
+            if (FAILED(devices->Item(index, &device)) || device == nullptr)
+                continue;
+            LPWSTR id = nullptr;
+            IPropertyStore* properties = nullptr;
+            PROPVARIANT name;
+            PropVariantInit(&name);
+            if (SUCCEEDED(device->GetId(&id)) &&
+                SUCCEEDED(device->OpenPropertyStore(STGM_READ, &properties)) &&
+                SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName, &name)) && name.vt == VT_LPWSTR)
+            {
+                text += id;
+                text += L'\t';
+                text += name.pwszVal;
+                text += L'\n';
+                ++count;
+            }
+            PropVariantClear(&name);
+            if (properties != nullptr) properties->Release();
+            if (id != nullptr) CoTaskMemFree(id);
+            device->Release();
+        }
+    }
+    if (devices != nullptr) devices->Release();
+    if (enumerator != nullptr) enumerator->Release();
+    if (SUCCEEDED(com)) CoUninitialize();
+    writeWide(text, buffer, bufferChars);
+    return count;
+}
+
 __declspec(dllexport) int __cdecl ElkaFx_IsAsioDriverRegistered()
 {
     std::lock_guard lock(g_mutex);

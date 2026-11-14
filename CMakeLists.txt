@@ -215,3 +215,9 @@ add_executable(DryPathChecks EXCLUDE_FROM_ALL tests/DryPathChecks/main.cpp src/e
 target_include_directories(DryPathChecks PRIVATE src)
 target_compile_definitions(DryPathChecks PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(DryPathChecks PRIVATE Avrt)
+
+# Follows a real device's clock for ~15 s (silence only). Not part of the default build.
+add_executable(ClockFollowerChecks EXCLUDE_FROM_ALL tests/ClockFollowerChecks/main.cpp)
+target_include_directories(ClockFollowerChecks PRIVATE src)
+target_compile_definitions(ClockFollowerChecks PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(ClockFollowerChecks PRIVATE Ole32)
