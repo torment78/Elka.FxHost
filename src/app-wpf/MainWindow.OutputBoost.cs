@@ -22,7 +22,9 @@ public partial class MainWindow
         {
             if (settings.Mode is not (CallbackMode.Input or CallbackMode.Output) ||
                 (activeMode & settings.Mode) == 0 || settings.OutputBoostDb == 0) continue;
-            var available = VoicemeeterIoLayout.GetEndpoints(settings.Mode, _kind);
+            // The volume belongs to the FX Out node; FX In settings never drive FX Out level.
+            if (!settings.Endpoint.OutputSide) continue;
+            var available = FxHostEdition.SideEndpoints(outputSide: true);
             if (!available.Any(endpoint => endpoint == settings.Endpoint)) continue;
             int stream = settings.Mode == CallbackMode.Output ? 1 : 0;
             int milliDb = (int)Math.Round(settings.OutputBoostDb * 1000);

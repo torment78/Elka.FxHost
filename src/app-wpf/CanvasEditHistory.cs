@@ -103,10 +103,16 @@ internal sealed class CanvasHistoryStore(string directory)
     private readonly object _gate = new();
     internal Task PendingWrite { get; private set; } = Task.CompletedTask;
 
+    // Each snapshot gets a file name once; later writes only add new files and delete
+    // dropped ones, instead of re-serialising every snapshot (with full VST state) each time.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, string> _names = new();
+    private readonly HashSet<string> _written = new(StringComparer.OrdinalIgnoreCase);
+    private long _nextName;
+
     internal void Write(CanvasEditHistory history)
     {
         // These snapshots are detached from the UI; no native/plugin work occurs here.
-        var snapshots = history.Undo.Select((s, i) => ($"undo-{i + 1:00}.json", s)).ToArray();
+        var snapshots = history.Undo.Select(s => (_names.GetValue(s, _ => $"undo-{Interlocked.Increment(ref _nextName):000000}.json"), s)).ToArray();
         var ticket = Interlocked.Increment(ref _ticket);
         PendingWrite = Task.Run(() =>
         {
@@ -119,14 +125,19 @@ internal sealed class CanvasHistoryStore(string directory)
                     foreach (var (name, snapshot) in snapshots)
                     {
                         var path = Path.Combine(directory, name);
+                        if (_written.Contains(name) && File.Exists(path)) continue;
                         File.WriteAllBytes(path + ".tmp", JsonSerializer.SerializeToUtf8Bytes(snapshot));
                         File.Move(path + ".tmp", path, true);
+                        _written.Add(name);
                     }
                     var names = snapshots.Select(s => s.Item1).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     foreach (var path in Directory.EnumerateFiles(directory, "*.json"))
                         if ((Path.GetFileName(path).StartsWith("undo-", StringComparison.Ordinal) ||
                              Path.GetFileName(path).StartsWith("redo-", StringComparison.Ordinal)) && !names.Contains(Path.GetFileName(path)))
+                        {
                             File.Delete(path);
+                            _written.Remove(Path.GetFileName(path));
+                        }
                 }
                 catch (Exception ex) { RuntimeLog.Write($"Canvas snapshots could not be written: {ex.Message}"); }
             }

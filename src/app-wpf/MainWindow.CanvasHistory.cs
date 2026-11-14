@@ -270,7 +270,7 @@ public partial class MainWindow
             _settingsByEndpoint.Clear();
             foreach (var saved in target.Endpoints)
             {
-                var endpoint = VoicemeeterIoLayout.GetEndpoints(saved.Mode, _kind).FirstOrDefault(e => e.Name == saved.EndpointName);
+                var endpoint = FxHostEdition.FindByName(saved.EndpointName, saved.OutputSide);
                 if (endpoint is null) continue;
                 var settings = new EndpointChannelSettings(saved.Mode, endpoint);
                 settings.ApplySnapshot(saved); _settingsByEndpoint[settings.Key] = settings;

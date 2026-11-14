@@ -20,7 +20,16 @@ public partial class MainWindow
         await Task.Delay(TimeSpan.FromSeconds(10));
         foreach (var node in failed)
         {
-            if (_isShuttingDown || PluginBrowserBusy) return;
+            // A scan or another load may still be running: wait for it (up to 5 minutes)
+            // rather than dropping the retry for good.
+            for (var waited = 0; PluginBrowserBusy && !_isShuttingDown && waited < 300; waited++)
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            if (_isShuttingDown) return;
+            if (PluginBrowserBusy)
+            {
+                AppendLog($"{node.Name}: automatic retry skipped because VST loading stayed busy. Use Reload.");
+                continue;
+            }
             if (_settings.PluginNodes.Contains(node) && node.MissingPlugin)
                 await RetryUnavailablePluginNodeAsync(node);
         }
@@ -30,7 +39,12 @@ public partial class MainWindow
 
     private async Task RetryUnavailablePluginNodeAsync(PluginNodeSnapshot node)
     {
-        if (_isShuttingDown || PluginBrowserBusy || !node.MissingPlugin || !_settings.PluginNodes.Contains(node)) return;
+        if (_isShuttingDown || !node.MissingPlugin || !_settings.PluginNodes.Contains(node)) return;
+        if (PluginBrowserBusy)
+        {
+            AppendLog($"{node.Name}: another VST scan or load is running. Try Reload again when it has finished.");
+            return;
+        }
         var choice = SavedPluginChoice(node, _engine.PluginChoices());
         if (choice is null)
         {

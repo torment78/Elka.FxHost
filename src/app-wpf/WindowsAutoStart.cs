@@ -28,10 +28,29 @@ internal static class WindowsAutoStart
             var executablePath = Environment.ProcessPath;
             using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
             if (string.IsNullOrWhiteSpace(executablePath) || key?.GetValue(RunValueName) is not string command ||
-                string.IsNullOrWhiteSpace(command) ||
-                string.Equals(command.Trim('"'), executablePath, StringComparison.OrdinalIgnoreCase))
+                string.IsNullOrWhiteSpace(command))
                 return;
-            key.SetValue(RunValueName, $"\"{executablePath}\"", RegistryValueKind.String);
+
+            // Split "path" args (or path args) so arguments such as --tray survive the repoint.
+            var trimmed = command.Trim();
+            string path, arguments;
+            if (trimmed.StartsWith('"'))
+            {
+                var close = trimmed.IndexOf('"', 1);
+                path = close > 0 ? trimmed[1..close] : trimmed.Trim('"');
+                arguments = close > 0 ? trimmed[(close + 1)..].Trim() : string.Empty;
+            }
+            else
+            {
+                var space = trimmed.IndexOf(" -", StringComparison.Ordinal);
+                path = space > 0 ? trimmed[..space] : trimmed;
+                arguments = space > 0 ? trimmed[(space + 1)..].Trim() : string.Empty;
+            }
+
+            if (string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase))
+                return;
+            var repointed = arguments.Length == 0 ? $"\"{executablePath}\"" : $"\"{executablePath}\" {arguments}";
+            key.SetValue(RunValueName, repointed, RegistryValueKind.String);
         }
         catch
         {

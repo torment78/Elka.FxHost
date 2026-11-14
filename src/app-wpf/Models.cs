@@ -80,7 +80,12 @@ internal sealed record IoEndpoint(string Name, ChannelRange Range)
         ? $"{Name} ({Range.Start + 1})"
         : $"{Name} ({Range.Start + 1}-{Range.End + 1})";
 
-    public string Key(CallbackMode mode) => $"{mode}:{Name}:{Range.Start}:{Range.End}";
+    /// <summary>True for FX Out nodes. FX In A1 and FX Out A1 share a name but are different
+    /// nodes, so the side is part of the key (volume, position, hue, pins, hotkeys).</summary>
+    public bool OutputSide { get; init; }
+
+    public string Key(CallbackMode mode) =>
+        $"{mode}:{(OutputSide ? "Out:" : string.Empty)}{Name}:{Range.Start}:{Range.End}";
 
     public override string ToString() => DisplayName;
 }
@@ -124,6 +129,7 @@ internal sealed class ChannelSettingsSnapshot
 {
     public CallbackMode Mode { get; set; }
     public string EndpointName { get; set; } = string.Empty;
+    public bool OutputSide { get; set; }
     public int ChannelCount { get; set; }
     public bool[] Enabled { get; set; } = [];
     public double[] DelayMilliseconds { get; set; } = [];
@@ -219,6 +225,7 @@ internal sealed class EndpointChannelSettings
         {
             Mode = Mode,
             EndpointName = Endpoint.Name,
+            OutputSide = Endpoint.OutputSide,
             ChannelCount = Endpoint.ChannelCount,
             Enabled = [.. Enabled],
             DelayMilliseconds = [.. DelayMilliseconds],
@@ -1366,6 +1373,13 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
             return;
         }
 
+        // Channel enable/delay/gain live on the FX In node. An FX Out node only carries its
+        // output volume (output boost), so it must not overwrite the same channel's settings.
+        if (settings.Endpoint.OutputSide)
+        {
+            return;
+        }
+
         ElkaFx_SetTargetRange((int)settings.Mode, settings.Endpoint.Range.Start, settings.Endpoint.ChannelCount);
         for (var offset = 0; offset < settings.Endpoint.ChannelCount; offset++)
         {
@@ -1381,7 +1395,7 @@ internal sealed class NativeEngineClient : IDisposable, IPluginSavedData
 
     public void ClearChannelSettings(CallbackMode mode, IoEndpoint endpoint)
     {
-        if (!_attached)
+        if (!_attached || endpoint.OutputSide)
         {
             return;
         }

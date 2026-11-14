@@ -98,13 +98,13 @@ internal static class FxHostEdition
         {
             if (!linkedChannels.Contains(channel))
             {
-                endpoints.Add(new IoEndpoint(LinkedEndpointName([channel]), new ChannelRange(channel, channel)));
+                endpoints.Add(new IoEndpoint(LinkedEndpointName([channel]), new ChannelRange(channel, channel)) { OutputSide = outputSide });
                 continue;
             }
 
             var link = links.FirstOrDefault(candidate => candidate.Min() == channel);
             if (link is not null)
-                endpoints.Add(new IoEndpoint(LinkedEndpointName(link), ChannelRange.FromChannels(link)));
+                endpoints.Add(new IoEndpoint(LinkedEndpointName(link), ChannelRange.FromChannels(link)) { OutputSide = outputSide });
         }
 
         SideCache[index] = endpoints;
@@ -113,7 +113,11 @@ internal static class FxHostEdition
 
     /// <summary>Both sides' nodes, for lookups by key.</summary>
     public static IEnumerable<IoEndpoint> AllEndpoints() =>
-        SideEndpoints(false).Concat(SideEndpoints(true)).DistinctBy(static endpoint => (endpoint.Name, endpoint.Range));
+        SideEndpoints(false).Concat(SideEndpoints(true));
+
+    /// <summary>The node on the given side with this name, if it exists.</summary>
+    public static IoEndpoint? FindByName(string name, bool outputSide) =>
+        SideEndpoints(outputSide).FirstOrDefault(endpoint => endpoint.Name == name);
 
     /// <summary>Saved as "0,2,4" (click order); older "start-end" entries still load.</summary>
     public static void LoadLinks(IEnumerable<string>? inLinks, IEnumerable<string>? outLinks)

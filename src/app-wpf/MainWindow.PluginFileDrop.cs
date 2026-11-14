@@ -51,11 +51,45 @@ public partial class MainWindow
                 AppendLog($"{Path.GetFileName(path)}: no loadable VST was found. The existing VST list has been kept.");
                 continue;
             }
-            AddPluginScanFolder(Path.GetDirectoryName(path)!);
             var choiceToLoad = matches.Length == 1 ? matches[0] : ChooseDroppedPlugin(matches);
             if (choiceToLoad is null) continue;
+            if (Path.GetDirectoryName(path) is { } folder && IsReasonableDroppedPluginFolder(folder))
+                AddPluginScanFolder(folder);
             await AddPluginNodeAsync(choiceToLoad, position, group);
             position.Offset(28, 28);
+        }
+    }
+
+    /// <summary>
+    /// A dropped file's folder is kept as a scan folder only if a full rescan of it is
+    /// reasonable: never a drive root or a general user folder (Desktop, Downloads, ...),
+    /// which would make every later scan walk the whole drive or profile.
+    /// </summary>
+    private static bool IsReasonableDroppedPluginFolder(string folder)
+    {
+        try
+        {
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+            if (string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full) ?? string.Empty), StringComparison.OrdinalIgnoreCase))
+                return false;
+            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] general =
+            [
+                profile,
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                Path.Combine(profile, "Downloads"),
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            ];
+            return !general.Where(static value => !string.IsNullOrEmpty(value))
+                .Any(value => string.Equals(full, Path.TrimEndingDirectorySeparator(value), StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
         }
     }
 

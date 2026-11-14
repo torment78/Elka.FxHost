@@ -18,8 +18,10 @@ internal sealed class SignalMonitorWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SignalMonitorMailbox _mailbox;
     private readonly PeakHoldSession? _peakSession;
-    private readonly PeakHoldSession.Subscription? _peakWatch;
-    private readonly EndpointMeterAddress _peakAddress;
+    // One peak-hold watch for a contiguous node; one per channel for a scattered link
+    // (A1+A3+A5), so peak hold and Reset cover every channel, not just the first.
+    private readonly List<PeakHoldSession.Subscription> _peakWatches = [];
+    private readonly EndpointMeterAddress[] _peakAddresses;
     private readonly TextBlock _peakText = new() { FontSize = 12, Foreground = Brushes.WhiteSmoke };
     private readonly System.Windows.Shapes.Ellipse _peakDot = new()
         { Width = 10, Height = 10, StrokeThickness = 1, Margin = new Thickness(7, 0, 0, 0) };
@@ -53,7 +55,9 @@ internal sealed class SignalMonitorWindow : Window
         // Do not inherit the main dispatcher's implicit Window style/resources.
         Style = new Style(typeof(Window));
         _mailbox = new SignalMonitorMailbox(channelCount);
-        _peakAddress = new EndpointMeterAddress(stream, outputSide, channels[0], contiguous ? channelCount : 1);
+        _peakAddresses = contiguous
+            ? [new EndpointMeterAddress(stream, outputSide, channels[0], channelCount)]
+            : channels.Select(channel => new EndpointMeterAddress(stream, outputSide, channel, 1)).ToArray();
         _endpointName = endpoint;
         _peakSession = peakSession ?? (testReader is null ? PeakHoldSession.Shared : null);
         Title = $"{endpoint} - {side} - Signal Monitor";
@@ -80,8 +84,27 @@ internal sealed class SignalMonitorWindow : Window
         if (testReader is null && handle == 0) throw new InvalidOperationException("The audio engine is not ready, or too many signal monitors are open.");
         try
         {
-            _peakWatch = _peakSession?.Subscribe(_peakAddress, _mailbox.MergePeakHold, _mailbox.ResetPeakChannels);
-            _peakWatch?.Poll();
+            if (_peakSession is not null)
+            {
+                for (int index = 0; index < _peakAddresses.Length; ++index)
+                {
+                    // Scattered links: watch i reports channel 0, which is monitor row i.
+                    int row = _peakAddresses.Length == 1 ? 0 : index;
+                    _peakWatches.Add(row == 0 && _peakAddresses.Length == 1
+                        ? _peakSession.Subscribe(_peakAddresses[index], _mailbox.MergePeakHold, _mailbox.ResetPeakChannels)
+                        : _peakSession.Subscribe(_peakAddresses[index],
+                            (maximum, overs) =>
+                            {
+                                var shifted = new float[8];
+                                var shiftedOvers = new uint[8];
+                                shifted[row] = maximum[0];
+                                shiftedOvers[row] = overs.Length > 0 ? overs[0] : 0;
+                                _mailbox.MergePeakHold(shifted, shiftedOvers);
+                            },
+                            (_, _) => _mailbox.ResetPeakChannels(row, 1)));
+                }
+            }
+            foreach (var watch in _peakWatches) watch.Poll();
             RefreshPeakReadout();
             _reader = Task.Factory.StartNew(() =>
             {
@@ -96,7 +119,7 @@ internal sealed class SignalMonitorWindow : Window
         }
         catch
         {
-            _peakWatch?.Dispose();
+            foreach (var watch in _peakWatches) watch.Dispose();
             if (testReader is null) NativeSignalMonitor.Close(handle);
             _lifetime.Dispose();
             throw;
@@ -125,7 +148,7 @@ internal sealed class SignalMonitorWindow : Window
         button.Click += (_, _) =>
         {
             if (_peakSession is null) _mailbox.ResetPeak();
-            else _peakSession.Reset(_peakAddress);
+            else foreach (var address in _peakAddresses) _peakSession.Reset(address);
             RefreshPeakReadout();
         };
         RefreshPeakReadout();
@@ -322,7 +345,7 @@ internal sealed class SignalMonitorWindow : Window
                 previous = sequence;
                 _mailbox.Publish(frame);
             }
-            _peakWatch?.Poll();
+            foreach (var watch in _peakWatches) watch.Poll();
             RequestDraw();
             if (!cadence.WaitNext()) break;
         }
@@ -364,7 +387,7 @@ internal sealed class SignalMonitorWindow : Window
         _lifetime.Cancel();
         // Reader never invokes the dispatcher. Joining ensures the native tap is gone before engine shutdown.
         _reader.GetAwaiter().GetResult();
-        _peakWatch?.Dispose();
+        foreach (var watch in _peakWatches) watch.Dispose();
         _mailbox.Updated = null;
         _lifetime.Dispose();
         _view.ReleaseHistory();

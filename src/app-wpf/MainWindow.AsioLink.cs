@@ -180,12 +180,18 @@ public partial class MainWindow
             return;
         }
 
-        AppendLog(_engine.SetAsioChannelCount(channels));
+        // Save first: if that fails, the driver must keep the count the app is running with.
         if (!SaveSettings())
         {
-            AppendLog("Could not save the session before restarting; restart FX Host manually.");
+            AppendLog("Could not save the session; the channel count was not changed.");
+            _updatingAsioLinkControls = true;
+            _asioChannelCountComboBox.SelectedItem = _asioChannelCountComboBox.Items.Cast<ComboBoxItem>()
+                .FirstOrDefault(item => (int)item.Tag == FxHostEdition.ChannelCount);
+            _updatingAsioLinkControls = false;
             return;
         }
+
+        AppendLog(_engine.SetAsioChannelCount(channels));
 
         ApplicationRestart.StartAfterCurrentProcessExits();
         ShutdownFromTray();

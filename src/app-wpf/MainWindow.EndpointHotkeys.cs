@@ -19,7 +19,7 @@ public partial class MainWindow
             {
                 var mode = stream == 1 || (stream == 2 && outputSide) ? CallbackMode.Output : CallbackMode.Input;
                 string canvas = stream == 2 ? "Input-Output" : stream == 1 ? "Output-Output" : "Input-Input";
-                foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(mode, _kind))
+                foreach (var endpoint in FxHostEdition.SideEndpoints(outputSide))
                 {
                     var reference = new EndpointHotkeyTarget(mode, endpoint.Key(mode), outputSide, stream, endpoint.ChannelCount);
                     string name = $"{canvas} / {endpoint.Name} / {(outputSide ? "Right" : "Left")}";
@@ -42,7 +42,7 @@ public partial class MainWindow
         if (!EndpointHotkeyStreamAvailable(target.Stream)) return;
         var expectedMode = target.Stream == 1 || (target.Stream == 2 && target.OutputSide) ? CallbackMode.Output : CallbackMode.Input;
         if (target.Mode != expectedMode) return;
-        var endpoint = VoicemeeterIoLayout.GetEndpoints(target.Mode, _kind).FirstOrDefault(e => e.Key(target.Mode) == target.Key);
+        var endpoint = FxHostEdition.SideEndpoints(target.OutputSide).FirstOrDefault(e => e.Key(target.Mode) == target.Key);
         if (endpoint is null) return;
         if (action == EditorHotkeyAction.Open)
         {

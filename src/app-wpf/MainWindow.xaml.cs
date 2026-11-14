@@ -1582,8 +1582,7 @@ public partial class MainWindow : Window
         FxHostEdition.LoadLinks(_settings.FxInLinks, _settings.FxOutLinks);
         foreach (var snapshot in _settings.Endpoints)
         {
-            var endpoint = FxHostEdition.AllEndpoints()
-                .FirstOrDefault(candidate => candidate.Name == snapshot.EndpointName);
+            var endpoint = FxHostEdition.FindByName(snapshot.EndpointName, snapshot.OutputSide);
             if (endpoint is null)
             {
                 continue;
@@ -1592,6 +1591,17 @@ public partial class MainWindow : Window
             var endpointSettings = new EndpointChannelSettings(snapshot.Mode, endpoint);
             endpointSettings.ApplySnapshot(snapshot);
             _settingsByEndpoint[endpointSettings.Key] = endpointSettings;
+
+            // Before FX Out nodes had their own key, their output volume was saved on the FX In
+            // entry of the same name. Move it to the FX Out node once.
+            if (!snapshot.OutputSide && snapshot.OutputBoostDb != 0 &&
+                !_settings.Endpoints.Any(other => other.OutputSide && other.EndpointName == snapshot.EndpointName) &&
+                FxHostEdition.FindByName(snapshot.EndpointName, outputSide: true) is { } outEndpoint)
+            {
+                var outSettings = new EndpointChannelSettings(snapshot.Mode, outEndpoint) { OutputBoostDb = snapshot.OutputBoostDb };
+                _settingsByEndpoint[outSettings.Key] = outSettings;
+                endpointSettings.OutputBoostDb = 0;
+            }
         }
 
         _normalizedEndpointLayout = NormalizeOverlappingEndpointCanvasOffsets();
@@ -1603,15 +1613,16 @@ public partial class MainWindow : Window
     private bool NormalizeOverlappingEndpointCanvasOffsets()
     {
         var normalized = false;
-        foreach (var mode in new[] { CallbackMode.Input, CallbackMode.Output })
+        foreach (var outputSide in new[] { false, true })
         {
-            var endpoints = VoicemeeterIoLayout.GetEndpoints(mode, _kind);
+            var mode = CanvasEndpointMode(outputSide);
+            var endpoints = FxHostEdition.SideEndpoints(outputSide);
             var baseY = VstEndpointStackTop;
             var previousBottom = double.NegativeInfinity;
             var overlaps = false;
             foreach (var endpoint in endpoints)
             {
-                var pinCount = CanvasPinCount(mode, endpoint, outputSide: mode == CallbackMode.Output);
+                var pinCount = CanvasPinCount(mode, endpoint, outputSide);
                 var top = baseY + EndpointCanvasYOffset(endpoint.Key(mode));
                 if (top < previousBottom + 8.0)
                 {
@@ -2413,6 +2424,25 @@ public partial class MainWindow : Window
         if (offsets.Length == 0)
         {
             throw new InvalidOperationException($"{command.SourceText}: no matching channel in {endpoint.Name}.");
+        }
+
+        if (endpoint.OutputSide)
+        {
+            // FX Host has one enable/delay/gain per ASIO channel, held by the FX In node that
+            // contains it (it acts on that channel's FX Out). Apply Out(...) there.
+            var changedSettings = new List<EndpointChannelSettings>();
+            foreach (var offset in offsets)
+            {
+                var channel = endpoint.Range.ChannelAt(offset);
+                var owner = FxHostEdition.SideEndpoints(outputSide: false).FirstOrDefault(node => node.Range.Contains(channel));
+                if (owner is null) continue;
+                var ownerSettings = GetOrCreateChannelSettings(CanvasEndpointMode(outputSide: false), owner);
+                ApplyMfxTextCommandToChannel(ownerSettings, owner.Range.OffsetOf(channel), command);
+                if (!changedSettings.Contains(ownerSettings)) changedSettings.Add(ownerSettings);
+            }
+
+            foreach (var changed in changedSettings) QueueChannelApply(changed);
+            return changedSettings.Any(changed => _selectedChannelSettings?.Key == changed.Key);
         }
 
         foreach (var offset in offsets)
@@ -7405,7 +7435,7 @@ private void RefreshEndpointButtonSelection()
         {
             var mode = CanvasEndpointMode(outputSide);
             var y = VstEndpointStackTop;
-            foreach (var endpoint in VoicemeeterIoLayout.GetEndpoints(mode, _kind))
+            foreach (var endpoint in FxHostEdition.SideEndpoints(outputSide))
             {
                 var pinCount = CanvasPinCount(mode, endpoint, outputSide);
                 yield return new Rect(outputSide ? VstRightEndpointX : VstCanvasWallMargin,
@@ -11416,7 +11446,8 @@ private void RefreshEndpointButtonSelection()
 
     private void DisconnectCanvasConnection(CanvasConnectionSnapshot connection)
     {
-        DisconnectCanvasConnectionCore(connection);
+        if (!DisconnectCanvasConnectionCore(connection))
+            return;
         AppendLog($"Disconnected {CanvasConnectionLabel(connection)}.");
         RefreshEngineCallbackMode();
         RebuildVstNodeList();
@@ -11426,6 +11457,11 @@ private void RefreshEndpointButtonSelection()
 
     private bool DisconnectCanvasConnectionCore(CanvasConnectionSnapshot connection)
     {
+        // Route toggles flip state: disconnecting a cable that is already gone would turn
+        // its audio back on. Only act on cables that still exist.
+        if (!_settings.CanvasConnections.Contains(connection))
+            return false;
+
         switch (connection.Kind)
         {
         case ConnectionEndpointToNode:

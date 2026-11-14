@@ -50,7 +50,17 @@ internal sealed class TrayController : IDisposable
             menu.Items.Add("Shutdown", null, (_, _) => shutdown());
             _baseIcon = CreateIcon();
             using var icon = new Forms.NotifyIcon { Text = Title, Icon = _baseIcon, ContextMenuStrip = menu };
-            icon.MouseUp += (_, e) => { if (e.Button == Forms.MouseButtons.Left) toggle(); };
+            // One toggle per click gesture: the second click of a double-click is ignored,
+            // otherwise a double-click opens the window and hides it again.
+            long lastToggle = long.MinValue / 2;
+            icon.MouseClick += (_, e) =>
+            {
+                if (e.Button != Forms.MouseButtons.Left) return;
+                var now = Environment.TickCount64;
+                if (now - lastToggle < Forms.SystemInformation.DoubleClickTime) return;
+                lastToggle = now;
+                toggle();
+            };
             lock (_gate)
             {
                 if (_disposed) return;

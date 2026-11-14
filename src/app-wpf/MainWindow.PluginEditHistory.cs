@@ -148,7 +148,13 @@ public partial class MainWindow
             : string.IsNullOrEmpty(saved.PluginPresetBase64) || SavedPluginData.SetPluginNodePreset(node.Slot, saved.PluginPresetBase64);
         if (!string.IsNullOrEmpty(saved.PluginParameterStateBase64))
             restored = SavedPluginData.SetPluginNodeParameterState(node.Slot, saved.PluginParameterStateBase64) && restored;
-        if (!restored) throw new InvalidOperationException($"{node.Name}: VST rejected its history settings.");
+        if (!restored)
+        {
+            // Keep going: throwing here would leave the graph half-restored (routes off,
+            // nodes removed or re-created but not tracked). The VST keeps its current settings.
+            AppendLog($"{node.Name}: the VST did not accept its earlier settings; its current settings were kept.");
+            return;
+        }
         CopyHistoryData(node, new(saved.PluginStateBase64, saved.PluginPresetBase64, saved.PluginParameterStateBase64, string.Empty));
     }
 

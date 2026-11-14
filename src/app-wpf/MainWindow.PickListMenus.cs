@@ -39,12 +39,25 @@ public partial class MainWindow
             };
 
         menu.Items.Add(submenu);
+
+        // Ticked entries apply when the menu is closed by clicking back on the canvas.
+        // Escape, or choosing another menu command, cancels them.
+        var cancelled = false;
+        menu.Opened += (_, _) => cancelled = false;
+        menu.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Escape) cancelled = true;
+        };
+        menu.AddHandler(MenuItem.ClickEvent, new System.Windows.RoutedEventHandler((_, e) =>
+        {
+            if (e.OriginalSource is MenuItem clicked && !clicked.StaysOpenOnClick) cancelled = true;
+        }));
         menu.Closed += (_, _) =>
         {
             var picked = items.Where(entry => entry.Item.IsChecked).Select(entry => entry.Value).ToList();
             foreach (var (item, _) in items) item.IsChecked = false;
             all.IsChecked = false;
-            if (picked.Count > 0) apply(picked);
+            if (!cancelled && picked.Count > 0) apply(picked);
         };
     }
 
@@ -57,8 +70,16 @@ public partial class MainWindow
 
     private void DisconnectCanvasConnections(IReadOnlyList<CanvasConnectionSnapshot> connections)
     {
-        foreach (var connection in connections)
-            DisconnectCanvasConnection(connection);
+        // Disconnect all first, then refresh the canvas once (not once per cable).
+        var removed = connections.Where(DisconnectCanvasConnectionCore).ToList();
+        if (removed.Count == 0) return;
+        AppendLog(removed.Count == 1
+            ? $"Disconnected {CanvasConnectionLabel(removed[0])}."
+            : $"Disconnected {removed.Count} cables.");
+        RefreshEngineCallbackMode();
+        RebuildVstNodeList();
+        RebuildRoutingCanvas();
+        QueueSave();
     }
 
     /// <summary>Takes the picked channels out of a linked node; the rest stay linked.</summary>
