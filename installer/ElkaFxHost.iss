@@ -113,7 +113,7 @@ Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows
 
 [Run]
 Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{app}\{#AppExe}"""; StatusMsg: "Disabling Windows power throttling for Elka FX Host..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableFxHostPowerThrottling
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,Elka FX Host}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,Elka FX Host}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 const

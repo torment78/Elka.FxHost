@@ -10,6 +10,19 @@ public partial class MainWindow
         BringFxHostWindowToFront();
     }
 
+    private void ToggleFxHostWindow()
+    {
+        if (_isShuttingDown) return;
+        if (IsVisible && ShowInTaskbar && WindowState != WindowState.Minimized)
+        {
+            HideToTray(showHint: false);
+        }
+        else
+        {
+            BringFxHostWindowToFront();
+        }
+    }
+
     private void BringFxHostWindowToFront()
     {
         if (!IsVisible || !ShowInTaskbar)
