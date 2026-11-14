@@ -1,5 +1,7 @@
 # Elka FX Host
 
+![Elka FX Host - VST host with its own virtual ASIO driver for VB-Audio Matrix](docs/images/fx-host-social-preview.jpg)
+
 A VST2/VST3 host that sits behind its own virtual ASIO driver. It is built for VB-Audio
 Matrix (and works with any ASIO host).
 
