@@ -175,7 +175,7 @@ void realHostChecks()
     format.findAllTypesForFile(descriptions, pluginFile.getFullPathName());
     check(descriptions.size() == 1, "Real JUCE VST scan resolves synthetic module");
     juce::XmlElement cache("ELKA_PLUGIN_CACHE"); cache.addChildElement(descriptions[0]->createXml().release());
-    const auto cacheFile = folder.getChildFile("capacity-test-data/ElkaSoft/VoiceMeeterFxHost/plugin-cache.xml");
+    const auto cacheFile = folder.getChildFile("capacity-test-data/ElkaSoft/FxHost/plugin-cache.xml");
     cacheFile.getParentDirectory().createDirectory();
     check(cache.writeTo(cacheFile), "Test-only plugin cache written");
     {

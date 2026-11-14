@@ -89,10 +89,17 @@ const float* sourceChannelPointer(AudioBufferView buffer, int readOffset, int ch
     return nullptr;
 }
 
+// Set while the FX Host ASIO link block is processed. FX Out then starts silent, so the
+// "current" audio of a channel (what VSTs and routes take as input) is FX In itself.
+thread_local bool severedDryPathActive = false;
+
 const float* currentChannelPointer(AudioBufferView buffer, int readOffset, int channel) noexcept
 {
     if (channel < 0 || channel >= MaxCallbackChannels)
         return nullptr;
+
+    if (severedDryPathActive)
+        return sourceChannelPointer(buffer, readOffset, channel);
 
     if (buffer.write != nullptr &&
         channel < buffer.outputChannels &&
@@ -1359,7 +1366,9 @@ void RealtimeEngine::processInsertAsio(AudioBufferView buffer) noexcept
     DspPerformanceScope timing(dspPerformance, 3, buffer.sampleRate, buffer.samplesPerFrame);
     signalMonitors.capture(0, false, buffer.read, buffer.inputChannels, buffer.samplesPerFrame, buffer.sampleRate);
     peakHold.capture(0, false, buffer.read, buffer.inputChannels, buffer.samplesPerFrame);
+    severedDryPathActive = true;
     processInternal(buffer, CallbackStreamKind::InputInsert, false, 3, timing.active() ? &timing : nullptr);
+    severedDryPathActive = false;
     signalMonitors.capture(0, true, buffer.write, buffer.outputChannels, buffer.samplesPerFrame, buffer.sampleRate);
     peakHold.capture(0, true, buffer.write, buffer.outputChannels, buffer.samplesPerFrame);
 }
