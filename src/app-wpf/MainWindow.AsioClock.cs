@@ -1,34 +1,30 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 
 namespace Elka.VoiceMeeterFxHost.App;
 
 /// <summary>
-/// ASIO buffer size and clock settings for the Elka FX Host driver.
-/// Buffer size: Matrix runs a non-master ASIO device at the size the driver prefers, so
-/// it is set here (e.g. 512 to match Matrix) and Matrix resets the device to use it.
-/// Clock: "Internal" paces blocks with the PC timer; following a device paces them with
-/// that sound card's own clock (normally the interface Matrix uses as master), so the
-/// two never drift apart. The sample rate always follows whatever Matrix runs at.
+/// ASIO buffer size for the Elka FX Host driver. Matrix runs a non-master ASIO device at
+/// the size the driver prefers, so it is set here (e.g. 512 to match Matrix) and Matrix
+/// resets the device to use it. The driver runs on its own clock (the PC timer); the
+/// sample rate always follows Matrix.
+/// The driver can also follow another device's clock (DeviceClockFollower), but that is
+/// not offered in the UI yet; any earlier choice is reset to the internal clock.
 /// </summary>
 public partial class MainWindow
 {
     private static readonly int[] AsioBufferSizes = [32, 64, 128, 256, 512, 1024, 2048];
     private ComboBox? _asioBufferComboBox;
-    private ComboBox? _asioClockComboBox;
     private TextBlock? _asioClockStatusText;
     private int _lastControlPanelRequests = -1;
-
-    private sealed record ClockChoice(int Mode, string DeviceId, string Label)
-    {
-        public override string ToString() => Label;
-    }
 
     private void AddAsioClockControls()
     {
         if (_asioBufferComboBox is not null) return;
+
+        // Own clock only: undo a "follow device" choice made in 0.1.5.
+        if (_engine.AsioClockSource(out _) != 0)
+            AppendLog(_engine.SetAsioClockSource(0, string.Empty));
 
         var buffer = new ComboBox { Width = 120, Margin = new Thickness(0, 8, 16, 0), HorizontalAlignment = HorizontalAlignment.Left };
         foreach (var size in AsioBufferSizes)
@@ -41,14 +37,6 @@ public partial class MainWindow
                          "Matrix resets the device when you change it.";
         buffer.SelectionChanged += AsioBufferComboBox_SelectionChanged;
 
-        var clock = new ComboBox { Width = 280, Margin = new Thickness(0, 8, 16, 0), HorizontalAlignment = HorizontalAlignment.Left };
-        clock.ToolTip = "Internal: the driver times its blocks with the PC timer.\n" +
-                        "A device: the driver follows that sound card's clock (pick the interface Matrix uses as master), " +
-                        "so FX Host never drifts against it. The sample rate always follows Matrix.";
-        clock.DropDownOpened += (_, _) => FillAsioClockChoices(clock);
-        FillAsioClockChoices(clock);
-        clock.SelectionChanged += AsioClockComboBox_SelectionChanged;
-
         _asioClockStatusText = new TextBlock
         {
             Margin = new Thickness(0, 8, 0, 0),
@@ -58,11 +46,8 @@ public partial class MainWindow
 
         AsioLinkOptionsPanel.Children.Add(OptionLabel("Buffer size"));
         AsioLinkOptionsPanel.Children.Add(buffer);
-        AsioLinkOptionsPanel.Children.Add(OptionLabel("Clock"));
-        AsioLinkOptionsPanel.Children.Add(clock);
         AsioLinkOptionsPanel.Children.Add(_asioClockStatusText);
         _asioBufferComboBox = buffer;
-        _asioClockComboBox = clock;
         RefreshAsioClockStatus();
     }
 
@@ -74,21 +59,6 @@ public partial class MainWindow
         VerticalAlignment = VerticalAlignment.Center
     };
 
-    private void FillAsioClockChoices(ComboBox clock)
-    {
-        var mode = _engine.AsioClockSource(out var deviceId);
-        var choices = new List<ClockChoice> { new(0, string.Empty, "Internal (PC timer)") };
-        choices.AddRange(_engine.AudioOutputDevices().Select(device => new ClockChoice(1, device.Id, $"Follow: {device.Name}")));
-        if (mode == 1 && choices.All(choice => choice.DeviceId != deviceId))
-            choices.Add(new ClockChoice(1, deviceId, "Follow: (device not connected)"));
-
-        _updatingAsioLinkControls = true;
-        clock.Items.Clear();
-        foreach (var choice in choices) clock.Items.Add(choice);
-        clock.SelectedItem = choices.FirstOrDefault(choice => choice.Mode == mode && (mode == 0 || choice.DeviceId == deviceId)) ?? choices[0];
-        _updatingAsioLinkControls = false;
-    }
-
     private void AsioBufferComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_updatingAsioLinkControls || _asioBufferComboBox?.SelectedItem is not ComboBoxItem { Tag: int samples }) return;
@@ -96,14 +66,7 @@ public partial class MainWindow
         RefreshAsioClockStatus();
     }
 
-    private void AsioClockComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_updatingAsioLinkControls || _asioClockComboBox?.SelectedItem is not ClockChoice choice) return;
-        AppendLog(_engine.SetAsioClockSource(choice.Mode, choice.DeviceId));
-        RefreshAsioClockStatus();
-    }
-
-    /// <summary>Called with the regular status poll: clock state, and Matrix's ASIO panel button.</summary>
+    /// <summary>Called with the regular status poll: buffer state, and Matrix's ASIO panel button.</summary>
     private void RefreshAsioClockStatus()
     {
         if (_asioClockStatusText is null) return;
@@ -111,25 +74,15 @@ public partial class MainWindow
         string text;
         if (status is null || !status.DriverPresent)
         {
-            text = "Clock and buffer apply when Matrix runs the Elka FX Host device.";
+            text = "The buffer size applies when Matrix runs the Elka FX Host device.";
         }
         else
         {
-            var buffer = status.ActiveBufferSize > 0 ? $"running at {status.ActiveBufferSize} samples" : "not running";
+            text = status.ActiveBufferSize > 0
+                ? $"Driver: running at {status.ActiveBufferSize} samples on its own clock."
+                : "Driver: not running.";
             if (status.PreferredBufferSize > 0 && status.ActiveBufferSize > 0 && status.PreferredBufferSize != status.ActiveBufferSize)
-                buffer += $" (set to {status.PreferredBufferSize}; restart the device in Matrix if it does not reset)";
-            var ppm = (status.PartsPerBillion / 1000.0).ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture);
-            var clock = status.Mode != 1
-                ? "internal clock"
-                : status.FollowState switch
-                {
-                    1 => "measuring the device clock...",
-                    2 => $"locked to the device clock ({ppm} ppm vs PC timer)",
-                    3 => "device not found - using the PC timer",
-                    4 => "device busy or unavailable in Windows - using the PC timer",
-                    _ => "device clock starting..."
-                };
-            text = $"Driver: {buffer}, {clock}.";
+                text += $" Set to {status.PreferredBufferSize}; restart the device in Matrix if it does not reset.";
             if (_lastControlPanelRequests >= 0 && status.ControlPanelRequests != _lastControlPanelRequests)
                 ShowAsioSettingsFromControlPanel();
             _lastControlPanelRequests = status.ControlPanelRequests;
@@ -144,7 +97,6 @@ public partial class MainWindow
         BringFxHostWindowToFront();
         AsioLinkContentGrid.Visibility = Visibility.Visible;
         AsioLinkContentGrid.BringIntoView();
-        if (_asioClockComboBox is not null) FillAsioClockChoices(_asioClockComboBox);
         AppendLog("ASIO settings opened from the ASIO control panel.");
     }
 }

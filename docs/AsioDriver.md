@@ -78,12 +78,8 @@ FX Host is running).
 - **Buffer size** (32-2048): Matrix runs a non-master ASIO device at the size the
   driver prefers, so set it here to match Matrix (for example 512). Matrix resets the
   device when it changes; if it does not, restart the device in Matrix.
-- **Clock**
-  - *Internal (PC timer)*: blocks are timed by the Windows high-resolution timer.
-  - *Follow: (device)*: blocks are timed by that sound card's own clock. Pick the
-    interface Matrix uses as master so FX Host never drifts against it. FX Host keeps a
-    silent shared-mode stream open on that device to read its clock, and measures it
-    for about 12 s before applying the correction. If the device is missing or Windows
-    cannot open it (for example exclusive mode), the driver keeps the PC timer and the
-    status line says so.
+- **Clock**: the driver runs on its own clock (the Windows high-resolution timer).
+  Matrix resamples it to its master when needed. Following another device's clock
+  (for example a RODECaster) is prepared in the driver (`DeviceClockFollower`) but not
+  offered in the app yet.
 - The **sample rate** always follows Matrix.
