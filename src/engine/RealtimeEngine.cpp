@@ -1512,7 +1512,10 @@ void RealtimeEngine::processInternal(
     if (kind == CallbackStreamKind::InputInsert)
         processSinglePingInput(buffer);
 
-    applyConfiguredDelays(buffer, kind, readOffset, delayStream, suppressInputCallbackChannels);
+    // ASIO link: FX Out starts silent, so a channel delay is applied to what the cables
+    // wrote (after routing) instead of to the dry copy, which no longer exists.
+    if (!severedDryPathActive)
+        applyConfiguredDelays(buffer, kind, readOffset, delayStream, suppressInputCallbackChannels);
     if (RealtimeAudioProbeDiagnosticsEnabled)
         probeAudioDiscontinuity(buffer, kind, delayStream, readOffset, PopProbePrePlugin, true);
     if (RealtimeAudioProbeDiagnosticsEnabled)
@@ -1553,6 +1556,8 @@ void RealtimeEngine::processInternal(
         applyPluginGraphGate(buffer, kind, suppressInputCallbackChannels, pluginOutputWritten);
 
     applyDirectRoutes(buffer, kind, sourceReadOffset, enableInputOutputRoutes, suppressInputCallbackChannels, pluginOutputWritten);
+    if (severedDryPathActive)
+        applyConfiguredDelays(buffer, kind, readOffset, delayStream, suppressInputCallbackChannels);
     applyConfiguredGains(buffer, kind, delayStream, suppressInputCallbackChannels);
     applyOutputBoost(buffer, kind, delayStream, suppressInputCallbackChannels);
     if (!pluginProcessingSkipped)

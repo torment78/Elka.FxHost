@@ -135,6 +135,13 @@ bool MatrixLinkHost::openMapping(std::wstring& status)
     header->maxChannels = ml::MaxChannels;
     header->maxBlockSize = ml::MaxBlockSize;
     requestEvent = CreateEventW(nullptr, FALSE, FALSE, ml::RequestEventName);
+    if (requestEvent == nullptr)
+    {
+        // Without the event the service loop would spin at audio priority.
+        closeMapping();
+        status = L"Could not create the FX Host ASIO link event.";
+        return false;
+    }
     return true;
 }
 
@@ -199,6 +206,8 @@ bool MatrixLinkHost::start(std::wstring& status)
 
     if (worker.joinable())
         worker.join();
+    if (preparer.joinable())
+        preparer.join();
 
     header->host.pid.store(GetCurrentProcessId(), std::memory_order_relaxed);
     header->host.heartbeatMs.store(GetTickCount64(), std::memory_order_relaxed);
@@ -207,6 +216,7 @@ bool MatrixLinkHost::start(std::wstring& status)
     stopRequested.store(false, std::memory_order_release);
     running.store(true, std::memory_order_release);
     worker = std::thread([this] { serviceLoop(); });
+    preparer = std::thread([this] { prepareLoop(); });
 
     status = L"FX Host ASIO link started. Select \"Elka FX Host\" as an ASIO device in Matrix.";
     return true;
@@ -222,6 +232,8 @@ void MatrixLinkHost::stop(std::wstring& status) noexcept
     }
     if (worker.joinable())
         worker.join();
+    if (preparer.joinable())
+        preparer.join();
 
     std::lock_guard lock(mutex);
     if (header != nullptr)
@@ -295,6 +307,28 @@ void MatrixLinkHost::serviceLoop() noexcept
     }
 }
 
+// Not an audio thread. A Matrix sample-rate change resizes delay/route buffers; doing it
+// here keeps allocations off the link thread and lets the callback take the control lock.
+void MatrixLinkHost::prepareLoop() noexcept
+{
+    while (!stopRequested.load(std::memory_order_acquire))
+    {
+        const int wanted = requestedSampleRate.load(std::memory_order_acquire);
+        if (wanted > 0 && wanted != preparedSampleRate.load(std::memory_order_acquire) && prepareRate)
+        {
+            bool done = false;
+            try { done = prepareRate(wanted); }
+            catch (...) { done = false; }
+            if (done)
+            {
+                preparedSampleRate.store(wanted, std::memory_order_release);
+                continue;
+            }
+        }
+        Sleep(5);
+    }
+}
+
 void MatrixLinkHost::processBlock(long long sequence) noexcept
 {
     auto& request = header->toFx[sequence % ml::RingSlots];
@@ -307,11 +341,11 @@ void MatrixLinkHost::processBlock(long long sequence) noexcept
     if (frames <= 0 || channelCount <= 0 || rate <= 0)
         return;
 
-    if (rate != preparedSampleRate)
-    {
-        realtimeEngine.prepareDelayBuffers(rate);
-        preparedSampleRate = rate;
-    }
+    // Not prepared for this rate yet (Matrix changed it): answer with silence while the
+    // preparer thread resizes the buffers. Never allocate on this thread.
+    const bool prepared = rate == preparedSampleRate.load(std::memory_order_acquire);
+    if (!prepared)
+        requestedSampleRate.store(rate, std::memory_order_release);
     sampleRate.store(rate, std::memory_order_release);
     blockSize.store(frames, std::memory_order_release);
     channels.store(channelCount, std::memory_order_release);
@@ -338,7 +372,8 @@ void MatrixLinkHost::processBlock(long long sequence) noexcept
         readPointers.data(),
         writePointers.data()
     };
-    realtimeEngine.processInsertAsio(buffer);
+    if (prepared)
+        realtimeEngine.processInsertAsio(buffer);
 
     // The driver may have reused the request slot while we processed (we were very late).
     if (request.sequence.load(std::memory_order_acquire) != sequence)

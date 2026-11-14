@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -28,6 +29,13 @@ public:
 
     bool detectDriver(std::wstring& status);
     bool driverInfo(std::wstring& name, int& inputs, int& outputs) const;
+    // Rebuilds the engine's rate-dependent buffers off the audio thread. Returns false when
+    // it could not run right now (e.g. the control lock is busy); it is retried shortly.
+    using PrepareRate = std::function<bool(int sampleRate)>;
+    void setPrepareCallback(PrepareRate callback) { prepareRate = std::move(callback); }
+    // The engine is already prepared for this rate (called under the control lock).
+    void markPrepared(int rate) noexcept { preparedSampleRate.store(rate, std::memory_order_release); }
+
     bool start(std::wstring& status);
     void stop(std::wstring& status) noexcept;
     void status(std::wstring& status) const;
@@ -49,6 +57,7 @@ private:
     bool openMapping(std::wstring& status);
     void closeMapping() noexcept;
     void serviceLoop() noexcept;
+    void prepareLoop() noexcept;
     void processBlock(long long sequence) noexcept;
 
     RealtimeEngine& realtimeEngine;
@@ -57,6 +66,9 @@ private:
     void* requestEvent = nullptr;
     matrixlink::LinkHeader* header = nullptr;
     std::thread worker;
+    std::thread preparer;
+    PrepareRate prepareRate;
+    std::atomic<int> requestedSampleRate { 0 };
     std::atomic<bool> running { false };
     std::atomic<bool> stopRequested { false };
     std::atomic<int> sampleRate { 0 };
@@ -64,6 +76,6 @@ private:
     std::atomic<int> channels { 0 };
     std::atomic<unsigned long long> processedBlocks { 0 };
     long long lastProcessed = -1;
-    int preparedSampleRate = 0;
+    std::atomic<int> preparedSampleRate { 0 };
 };
 }

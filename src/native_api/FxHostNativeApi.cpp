@@ -431,7 +431,16 @@ std::vector<std::string> splitPluginFolders(const wchar_t* folders)
 NativeHost& host()
 {
     if (!g_host)
+    {
         g_host = std::make_unique<NativeHost>();
+        // Matrix sample-rate changes are prepared on the link's helper thread, under this
+        // lock. try_lock: stop() holds the lock while it joins that thread.
+        auto* created = g_host.get();
+        created->asioLink.setPrepareCallback([created](int rate) {
+            std::unique_lock lock(g_mutex, std::try_to_lock);
+            return lock.owns_lock() && created->engine.prepareDelayBuffers(rate);
+        });
+    }
 
     return *g_host;
 }
@@ -1321,6 +1330,7 @@ __declspec(dllexport) int __cdecl ElkaFx_StartAsioLink(wchar_t* status, int stat
             return -1;
         }
 
+        target.asioLink.markPrepared(sampleRate);
         std::wstring message;
         const bool ok = target.asioLink.start(message);
         writeWide(message, status, statusChars);

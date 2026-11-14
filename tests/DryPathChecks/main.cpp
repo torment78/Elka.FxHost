@@ -4,6 +4,7 @@
 #include "engine/RealtimeEngine.h"
 #include "plugins/RealtimePluginProcessor.h"
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -91,6 +92,29 @@ int main()
     check(halved, "In A1 -> VST -> Out A2 carries the processed audio");
     check(silentExcept(1), "VST route: only Out A2 carries audio");
     engine->clearPluginSlot(0);
+
+    // Channel delay on the ASIO link delays what the cable delivers (FX In A1 -> FX Out A4, 1 ms).
+    {
+        engine->prepareDelayBuffers(48000);
+        DirectAudioRoute line { 0, 3, 0, 100, false };
+        engine->setPluginPassthroughRoutes(CallbackStreamKind::InputInsert, &line, 1);
+        engine->setChannelEnabled(CallbackStreamKind::InputInsert, 3, true);
+        engine->setChannelDelayMilliseconds(CallbackStreamKind::InputInsert, 3, 1);
+        // An impulse on In A1 must arrive 48 samples (1 ms) later on Out A4.
+        std::vector<float> heard;
+        for (int block = 0; block < 4; ++block)
+        {
+            for (int i = 0; i < frames; ++i) in[0][i] = (block == 0 && i == 0) ? 1.0f : 0.0f;
+            engine->processInsertAsio(buffer);
+            heard.insert(heard.end(), out[3].begin(), out[3].end());
+        }
+        int peak = 0;
+        for (int i = 1; i < static_cast<int>(heard.size()); ++i) if (std::abs(heard[i]) > std::abs(heard[peak])) peak = i;
+        if (peak != 48) std::cerr << "delay peak at sample " << peak << std::endl;
+        check(peak == 48 && std::abs(heard[peak]) > 0.5f, "1 ms channel delay delays the cable by 48 samples");
+        engine->setChannelDelayMilliseconds(CallbackStreamKind::InputInsert, 3, 0);
+        engine->setPluginPassthroughRoutes(CallbackStreamKind::InputInsert, nullptr, 0);
+    }
 
     std::cout << "DryPathChecks: " << checks << " checks passed\n";
     return 0;

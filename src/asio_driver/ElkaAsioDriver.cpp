@@ -62,7 +62,7 @@ void copyName(char* destination, size_t capacity, const std::string& text) noexc
 class SharedLink
 {
 public:
-    ~SharedLink() { close(); }
+    ~SharedLink() { close(false); }
 
     bool open() noexcept
     {
@@ -78,7 +78,7 @@ public:
         void* view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, ml::TotalBytes);
         if (view == nullptr)
         {
-            close();
+            close(false);
             return false;
         }
 
@@ -91,13 +91,19 @@ public:
         return true;
     }
 
-    void close() noexcept
+    // Several driver instances can exist at once (a DAW or panel enumerating ASIO drivers
+    // while Matrix streams). Only the instance that started streaming owns the shared
+    // driver state; the others must never clear it.
+    void close(bool owner) noexcept
     {
         if (header != nullptr)
         {
-            header->driver.streaming.store(0, std::memory_order_release);
-            header->driver.heartbeatMs.store(0, std::memory_order_release);
-            header->driver.pid.store(0, std::memory_order_release);
+            if (owner)
+            {
+                header->driver.streaming.store(0, std::memory_order_release);
+                header->driver.heartbeatMs.store(0, std::memory_order_release);
+                header->driver.pid.store(0, std::memory_order_release);
+            }
             UnmapViewOfFile(header);
             header = nullptr;
         }
@@ -128,7 +134,8 @@ public:
     {
         stop();
         disposeBuffers();
-        link.close();
+        link.close(ownsLink);
+        ownsLink = false;
         g_objectCount.fetch_sub(1);
     }
 
@@ -169,8 +176,7 @@ public:
             setError("Shared memory unavailable; the driver will output silence.");
         else
         {
-            link.header->driver.channels.store(channels, std::memory_order_release);
-            link.header->driver.sampleRate.store(static_cast<int>(sampleRate), std::memory_order_release);
+            // Read only: a probing instance must not disturb a stream another instance owns.
             observedResetGeneration = link.header->host.resetGeneration.load(std::memory_order_acquire);
         }
         return ASIOTrue;
@@ -203,6 +209,13 @@ public:
 
         if (link.header != nullptr)
         {
+            // Clear replies left from an earlier stream so none is delivered as current.
+            for (int slot = 0; slot < ml::RingSlots; ++slot)
+            {
+                link.header->toFx[slot].sequence.store(-1, std::memory_order_relaxed);
+                link.header->fromFx[slot].sequence.store(-1, std::memory_order_relaxed);
+            }
+            ownsLink = true;
             auto& driver = link.header->driver;
             driver.pid.store(GetCurrentProcessId(), std::memory_order_relaxed);
             driver.sampleRate.store(static_cast<int>(sampleRate), std::memory_order_relaxed);
@@ -222,8 +235,15 @@ public:
     {
         running.store(false);
         if (clockThread.joinable())
-            clockThread.join();
-        if (link.header != nullptr)
+        {
+            // A host may call stop() from inside asioMessage (e.g. answering a reset request),
+            // which runs on the clock thread: joining itself would throw and end the host.
+            if (clockThread.get_id() == std::this_thread::get_id())
+                clockThread.detach();
+            else
+                clockThread.join();
+        }
+        if (link.header != nullptr && ownsLink)
             link.header->driver.streaming.store(0, std::memory_order_release);
         return ASE_OK;
     }
@@ -538,6 +558,7 @@ private:
     {
         auto& slotHeader = header->toFx[sequence % ml::RingSlots];
         slotHeader.sequence.store(-1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_release);
         float* slot = ml::toFxSlot(header, sequence);
         for (int channel = 0; channel < channels; ++channel)
         {
@@ -602,7 +623,8 @@ private:
                     }
                 }
                 // A torn read is detected if the host overwrote the slot while we copied.
-                delivered = slotHeader.sequence.load(std::memory_order_acquire) == wanted;
+                std::atomic_thread_fence(std::memory_order_acquire);
+                delivered = slotHeader.sequence.load(std::memory_order_relaxed) == wanted;
             }
         }
 
@@ -637,6 +659,7 @@ private:
     std::atomic<long> refCount { 1 };
     HWND parentWindow = nullptr;
     SharedLink link;
+    bool ownsLink = false; // true once this instance has started streaming
     int channels = ml::DefaultChannels;
     bool useInt32 = false;
     long preferredBufferSize = DefaultPreferredBufferSize;
