@@ -27,8 +27,8 @@ GitHubRelease Release(string version, bool beta = false) => new()
     Tag = $"v{version}", Prerelease = beta,
     Assets = [new GitHubAsset
     {
-        Name = $"ElkaVoiceMeeterFxHostSetup-v{version}.exe", State = "uploaded", Size = 1234,
-        Url = $"https://github.com/{Repository}/releases/download/v{version}/ElkaVoiceMeeterFxHostSetup-v{version}.exe"
+        Name = $"ElkaFxHostSetup-v{version}.exe", State = "uploaded", Size = 1234,
+        Url = $"https://github.com/{Repository}/releases/download/v{version}/ElkaFxHostSetup-v{version}.exe"
     }]
 };
 
@@ -54,11 +54,11 @@ Check(result.Stable is null && result.Beta is null, "installed and older release
 
 var stableMirror = Release("0.8.3.0", true);
 stableMirror.Tag = "v0.8.3.0+dev";
-stableMirror.Assets![0].Url = $"https://github.com/{Repository}/releases/download/v0.8.3.0%2Bdev/ElkaVoiceMeeterFxHostSetup-v0.8.3.0.exe";
+stableMirror.Assets![0].Url = $"https://github.com/{Repository}/releases/download/v0.8.3.0%2Bdev/ElkaFxHostSetup-v0.8.3.0.exe";
 result = SelectUpdates([Release("0.8.3.0"), stableMirror, Release("0.8.1.10", true)], Version("0.8.1.10"));
 Check(result.Stable?.Version.ToString() == "0.8.3.0" && result.Beta?.Version.ToString() == "0.8.3.0",
     "signed stable mirror reaches older users on both update channels");
-Check(result.Beta?.AssetName == "ElkaVoiceMeeterFxHostSetup-v0.8.3.0.exe" &&
+Check(result.Beta?.AssetName == "ElkaFxHostSetup-v0.8.3.0.exe" &&
     result.Beta.DownloadUri.AbsolutePath.Contains("v0.8.3.0%2Bdev/", StringComparison.Ordinal),
     "dev mirror accepts unchanged installer name and encoded metadata tag");
 result = SelectUpdates([Release("0.8.3.0"), stableMirror], Version("0.8.3.0"));
@@ -138,8 +138,9 @@ if (args.Contains("--live-rollback"))
 if (args.Contains("--live") || args.Contains("--live-stable-mirror"))
 {
     var live = new ApplicationUpdates();
-    var available = await live.CheckAsync("0.8.0.0", CancellationToken.None);
-    Check(available.Stable is not null && available.Beta is not null, "live GitHub stable and beta installers found");
+    var available = await live.CheckAsync("0.0.1", CancellationToken.None);
+    // Elka FX Host publishes dev builds as prereleases first; a stable release may not exist yet.
+    Check(available.Stable is not null || available.Beta is not null, "live GitHub installer found (stable or beta)");
     if (args.Contains("--live-stable-mirror"))
     {
         Check(available.Stable!.Version.CompareTo(available.Beta!.Version) == 0 &&
@@ -151,7 +152,7 @@ if (args.Contains("--live") || args.Contains("--live-stable-mirror"))
         Check(installed.Stable is null && installed.Beta is null,
             "live mirror is not offered again after installing that version");
     }
-    foreach (var candidate in new[] { available.Stable!, available.Beta! })
+    foreach (var candidate in new[] { available.Stable, available.Beta }.OfType<ApplicationUpdate>())
     {
         var path = await live.DownloadAsync(candidate, root, null, CancellationToken.None);
         Check(File.Exists(path), $"live {candidate.Channel} {candidate.Version} downloaded and verified (not launched)");

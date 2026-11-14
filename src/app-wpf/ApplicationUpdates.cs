@@ -16,7 +16,9 @@ internal sealed record AvailableUpdates(ApplicationUpdate? Stable, ApplicationUp
 internal sealed class ApplicationUpdates
 {
     internal const string Repository = "torment78/Elka.FxHost";
-    internal static readonly bool AutomaticChecksEnabled = false;
+    // Releases: github.com/torment78/Elka.FxHost. Dev builds are GitHub prereleases (the
+    // beta channel, verified by GitHub's SHA-256 digest); signed stable releases come later.
+    internal static readonly bool AutomaticChecksEnabled = true;
     private const long MaximumInstallerSize = 256 * 1024 * 1024;
     private static readonly HttpClient SharedClient = CreateClient();
     private readonly HttpClient _client;

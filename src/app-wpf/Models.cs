@@ -660,7 +660,7 @@ internal sealed class FxHostSettings
     public FloatingPanelSettings FloatingPanel { get; set; } = new();
     public bool AdvancedModeEnabled { get; set; } = true;
     public bool CheckStableUpdatesAutomatically { get; set; }
-    public bool CheckBetaUpdatesAutomatically { get; set; }
+    public bool CheckBetaUpdatesAutomatically { get; set; } = true; // dev builds are published as prereleases
     public bool StartupDelayEnabled { get; set; }
     public int StartupDelaySeconds { get; set; }
     public double? MainWindowLeft { get; set; }
