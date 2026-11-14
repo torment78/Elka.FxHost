@@ -232,6 +232,23 @@ Use it after a sample-rate change or when a plugin has become unresponsive.
 
 ## Settings And Hotkeys
 
+From **0.8.3.22**, FX Host starts at Windows **High** process priority by default,
+including when upgrading from older settings. **Menu > Settings > High Process
+Priority** switches between High and Normal immediately and remembers the choice.
+This changes the main FX Host process, not individual thread priorities. Guarded
+MMCSS scheduling and the plugin helpers' existing audio-thread setup are unchanged.
+It is not Realtime process priority and does not guarantee glitch-free playback.
+
+The installer's **Performance Options** page also offers an optional **Always run
+installed VoiceMeeter editions at High priority** checkbox. It applies
+to installed Standard, Banana and Potato executables, both 32-bit and 64-bit, even
+when VoiceMeeter is not running. Administrator approval is required by Setup.
+Restart VoiceMeeter after installation for this launch setting to take effect;
+Setup does not restart it or change its audio settings. Re-run Setup and untick the
+option, or uninstall FX Host, to restore the previous launch-priority values. Later
+priority changes made by another tool are preserved. Power-throttling exclusions
+are separate options.
+
 In development version **0.8.3.9**, open **Menu > Settings** to toggle **Node VU
 Meters**. Hardware inputs show L/R meters; virtual inputs and buses show two
 channels when compact and eight when expanded. The meters target 60 Hz with
@@ -252,6 +269,13 @@ highest captured sample amplitude since opening or reset, for example
 `Peak +3.01 dBFS`. Click the readout to reset that monitor's value and red dot.
 It is independent of the canvas circle. An open monitor has its own reader;
 closing it stops that reader and releases its tap.
+
+Destination monitors for **In -> In** and **Out -> Out** have a compact output
+volume fader between the endpoint name and Peak readout. It stays available in
+both History and Spectrum and controls the same **-24 to +24 dB** gain as the
+node's output-volume control. Changes stay synchronized between the two.
+Double-click the fader or its numeric value to reset to **0 dB**. Source monitors
+and the Main / In -> Out path do not have this gain control.
 
 These indicators measure sample peaks, not true peaks or confirmed clipping.
 Floating-point values can exceed 0 dBFS without being clipped inside the host;
@@ -328,8 +352,8 @@ Installers are downloaded under `%LOCALAPPDATA%\ElkaSoft\VoiceMeeterFxHost\Updat
 ASIO Patch uses the VoiceMeeter Insert Virtual ASIO driver as an alternative to
 the normal callback path.
 
-1. Expand **ASIO Patch**.
-2. Use **Probe** to show the compatible Insert ASIO driver.
+1. Expand **ASIO Patch**, read the mode warning, and click **OK** to reveal its controls.
+2. Check the detected Insert ASIO driver. Re-detection is available in **Menu > Settings** while Patch is stopped.
 3. Select the input sections that should have `Patch.insert` enabled.
 4. Click **Start**.
 

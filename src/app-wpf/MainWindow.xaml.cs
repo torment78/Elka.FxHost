@@ -249,6 +249,7 @@ public partial class MainWindow : Window
         };
 
         LoadSettings();
+        ApplyHostProcessPriority();
         ApplySavedWindowPlacement();
         WindowsAutoStart.RefreshPathIfEnabled();
         ShouldStartHiddenToTray = StartupTrayOptions.StartHiddenToTray || _settings.StartToTray;
