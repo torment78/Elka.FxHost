@@ -3503,9 +3503,33 @@ private void RefreshEndpointButtonSelection()
         menu.Items.Add(CreateNodeMenuItem("Hotkey", () => ShowEditorHotkeys(this, selectedEndpoint: hotkeyTarget)));
         menu.Items.Add(CreateNodeMenuItem("Select Section", () => SelectCanvasEndpoint(mode, endpoint)));
         if (endpoint.ChannelCount > 1)
-            AddPickListSubmenu(menu, "Unlink Channels",
-                endpoint.Range.Channels.Select(channel => (FxHostEdition.ChannelName(channel, outputSide), channel)).ToList(),
-                picked => UnlinkPickedChannels(endpoint, outputSide, picked));
+        {
+            // One click acts at once (All splits the node, a channel takes just that one out).
+            // The menu stays open for more clicks until you click outside or press Escape.
+            var unlink = new MenuItem { Header = "Unlink Channels" };
+            var all = new MenuItem { Header = "All", StaysOpenOnClick = true };
+            var channelItems = new List<MenuItem>();
+            all.Click += (_, _) =>
+            {
+                UnlinkPickedChannels(outputSide, endpoint.Range.Channels.ToList());
+                all.IsEnabled = false;
+                foreach (var item in channelItems) item.IsEnabled = false;
+            };
+            unlink.Items.Add(all);
+            unlink.Items.Add(new Separator());
+            foreach (var channel in endpoint.Range.Channels)
+            {
+                var item = new MenuItem { Header = FxHostEdition.ChannelName(channel, outputSide), StaysOpenOnClick = true };
+                item.Click += (_, _) =>
+                {
+                    UnlinkPickedChannels(outputSide, [channel]);
+                    item.IsEnabled = false;
+                };
+                channelItems.Add(item);
+                unlink.Items.Add(item);
+            }
+            menu.Items.Add(unlink);
+        }
         var cables = EndpointCableConnections(mode, endpoint, outputSide);
         AddPickListSubmenu(menu, "Disconnect Cables",
             cables.Select(connection => (CanvasConnectionLabel(connection), connection)).ToList(),

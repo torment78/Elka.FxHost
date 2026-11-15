@@ -105,11 +105,25 @@ public partial class MainWindow
             return false;
         }
 
+        // The linked node takes the color of the node that was Ctrl-clicked first.
+        var first = picked[0];
+        var firstHue = EndpointRouteHueKey(first.Endpoint.Key(first.Mode));
+        var firstChannel = first.Endpoint.Range.ChannelAt(0);
+
         var linked = FxHostEdition.TryLink(outputSide, picked.Select(static item => item.Endpoint).ToList(), out var message);
         AppendLog(message);
         ClearQuickGroupChain(log: false);
         if (linked)
+        {
+            var node = FxHostEdition.SideEndpoints(outputSide).FirstOrDefault(endpoint => endpoint.Range.Contains(firstChannel));
+            if (node is not null)
+            {
+                var key = node.Key(first.Mode);
+                if (firstHue is null) _settings.EndpointRouteHues.Remove(key);
+                else _settings.EndpointRouteHues[key] = firstHue;
+            }
             SaveChannelLinks();
+        }
         RebuildRoutingCanvas();
         return true;
     }

@@ -82,12 +82,25 @@ public partial class MainWindow
         QueueSave();
     }
 
-    /// <summary>Takes the picked channels out of a linked node; the rest stay linked.</summary>
-    private void UnlinkPickedChannels(IoEndpoint endpoint, bool outputSide, IReadOnlyList<int> channels)
+    /// <summary>
+    /// Takes the picked channels out of whatever linked node holds them now (the node may
+    /// already have changed from an earlier click in the same open menu); the rest stay linked.
+    /// </summary>
+    private void UnlinkPickedChannels(bool outputSide, IReadOnlyList<int> channels)
     {
-        if (!FxHostEdition.RemoveFromLink(outputSide, endpoint, channels, out var message))
-            return;
-        AppendLog(message);
+        var changed = false;
+        foreach (var channel in channels)
+        {
+            var node = FxHostEdition.SideEndpoints(outputSide)
+                .FirstOrDefault(candidate => candidate.ChannelCount > 1 && candidate.Range.Contains(channel));
+            if (node is null || !FxHostEdition.RemoveFromLink(outputSide, node,
+                    channels.Where(node.Range.Contains).ToList(), out var message))
+                continue;
+            AppendLog(message);
+            changed = true;
+        }
+
+        if (!changed) return;
         SaveChannelLinks();
         RebuildRoutingCanvas();
     }
