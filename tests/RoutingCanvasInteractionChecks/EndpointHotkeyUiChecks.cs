@@ -17,7 +17,7 @@ public partial class MainWindow
         _workspaceView = WorkspaceView.Vst;
         _vstCanvasMode = CallbackMode.Input;
         _vstInputCanvasRouteView = VstInputCanvasRouteView.InputReturn;
-        _advancedModeActive = true;
+        // FX Host: advanced mode is always on.
         _settings.NodeVuMetersEnabled = false;
         StopEndpointMeters();
         string graph = JsonSerializer.Serialize(_settings.CanvasConnections);
@@ -84,7 +84,7 @@ public partial class MainWindow
             Run(main);
             Assert(WaitFor(() => captures.Any(c => c == (2, false))), "direct-route monitor uses main stream, not input stream");
             Run(main);
-            _advancedModeActive = false;
+            // FX Host: there is no simple mode to switch to.
             Run(main);
             Assert(_signalMonitors.Count == 0 && EndpointHotkeyTargets().All(t => t.Endpoint!.Stream != 2),
                 "simple mode does not open or offer main callback monitors");
@@ -95,7 +95,7 @@ public partial class MainWindow
             _kind = VoicemeeterKind.Potato;
             _vstCanvasMode = CallbackMode.Input;
             _settings.EditorHotkeys.Clear();
-            _voicemeeterCommandWindow = new WindowInteropHelper(this).EnsureHandle();
+            _windowHandle = new WindowInteropHelper(this).EnsureHandle();
             var menu = BuildEndpointContextMenu(left.Mode, vaio, true);
             var hotkey = menu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "Hotkey"));
             InspectDialog(() => hotkey.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)), () => _editorHotkeysWindow, window =>

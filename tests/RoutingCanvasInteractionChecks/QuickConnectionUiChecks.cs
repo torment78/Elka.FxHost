@@ -13,7 +13,9 @@ public partial class MainWindow
         var startChecks = _interactionChecks;
         try
         {
-            foreach (var mode in new[] { CallbackMode.Input, CallbackMode.Output, CallbackMode.Main })
+            // FX Host: one canvas, with FX A1+A2 linked into stereo nodes on both sides.
+            FxHostEdition.LoadLinks(["0,1"], ["0,1"]);
+            foreach (var mode in new[] { CallbackMode.Input })
             {
                 _workspaceView = WorkspaceView.Vst;
                 _vstCanvasMode = mode == CallbackMode.Main ? CallbackMode.Input : mode;
@@ -21,8 +23,8 @@ public partial class MainWindow
                     ? VstInputCanvasRouteView.DirectOutput : VstInputCanvasRouteView.InputReturn;
                 var sourceMode = mode == CallbackMode.Main ? CallbackMode.Input : mode;
                 var destinationMode = mode == CallbackMode.Main ? CallbackMode.Output : mode;
-                var source = VoicemeeterIoLayout.GetEndpoints(sourceMode, _kind).First();
-                var destination = VoicemeeterIoLayout.GetEndpoints(destinationMode, _kind).First();
+                var source = FxHostEdition.SideEndpoints(outputSide: false).First();
+                var destination = FxHostEdition.SideEndpoints(outputSide: true).First();
                 var a = new PluginNodeSnapshot { Slot = 12, InstanceId = 1, Name = "Group first", Mode = mode, MissingPlugin = true };
                 var b = new PluginNodeSnapshot { Slot = 3, InstanceId = 2, Name = "Group last", Mode = mode, MissingPlugin = true };
                 var inserted = new PluginNodeSnapshot { Slot = 7, InstanceId = 3, Name = "Inserted VST", Mode = mode,
@@ -122,33 +124,43 @@ public partial class MainWindow
                 AddQuickGroupNode(inserted);
                 AddQuickGroupNode(next);
                 AddQuickGroupNode(inserted);
+                Assert(!_quickGroupNodeSlots.Contains(inserted.Slot), "Ctrl-click a selected VST deselects it");
+                AddQuickGroupNode(inserted);
                 SelectDestination();
                 Finish();
                 Assert(_settings.CanvasConnections.Count(edge => edge.Kind == ConnectionGroupOutputToNode && edge.ToSlot == next.Slot) == 2 &&
                     _settings.CanvasConnections.Count(edge => edge.Kind == ConnectionNodeToNode && edge.FromSlot == next.Slot && edge.ToSlot == inserted.Slot) == 2,
-                    "Re-selecting a VST moves it to the end of the combined click order");
+                    "Deselecting and re-selecting a VST moves it to the end of the combined click order");
 
                 Reset();
                 AddQuickGroupNode(inserted);
                 AddQuickGroupNode(next);
-                Assert(!ShouldCompleteQuickOrderedConnections() && ShouldCompleteUnattachedQuickGroup(),
-                    "Unattached create-group shortcut remains available");
+                Assert(ShouldCompleteQuickOrderedConnections(), "Loose VSTs use Enter to connect, never group");
+                Finish();
+                Assert(_settings.CanvasConnections.Count(edge => edge.Kind == ConnectionNodeToNode &&
+                    edge.FromSlot == inserted.Slot && edge.ToSlot == next.Slot) == 2, "Loose VSTs connect in click order");
+                AddQuickGroupNode(inserted);
+                AddQuickGroupNode(next);
                 AddQuickGroupEndpoint(new EndpointDragInfo(sourceMode, source, false));
                 SelectDestination();
-                Assert(!ShouldCompleteQuickOrderedConnections() && !ShouldCompleteQuickDirectConnections(),
-                    "Source + VSTs + destination retains the existing quick create-group flow");
+                Assert(ShouldCompleteQuickOrderedConnections(), "Source + VSTs + destination uses ordered wiring");
+                Finish();
+                Assert(_settings.CanvasConnections.Count(edge => edge.Kind == ConnectionNodeToNode &&
+                    edge.FromSlot == inserted.Slot && edge.ToSlot == next.Slot) == 2,
+                    "Connecting endpoints to an existing chain retains its internal wires without duplicates");
 
                 Reset();
                 AddQuickGroupExistingGroup(group);
                 AddQuickGroupNode(inserted);
                 _quickGroupPluginChoices.Add(new PluginChoice(0, "Browser choice", "VST3"));
-                Assert(!ShouldCompleteQuickOrderedConnections(), "Plugin-list selection retains the group-loading flow");
+                Assert(!ShouldCompleteQuickOrderedConnections(), "Plugin-list choices must load before connecting");
             }
             Console.WriteLine($"PASS: {_interactionChecks - startChecks} ordered quick-connect checks. No windows shown or native audio calls.");
         }
         finally
         {
             ClearQuickGroupChain(log: false);
+            FxHostEdition.LoadLinks([], []);
             _settings.PluginNodes = savedNodes;
             _settings.PluginGroups = savedGroups;
             _settings.CanvasConnections = savedCables;

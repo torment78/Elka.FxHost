@@ -83,6 +83,12 @@ public partial class MainWindow
     /// Ctrl-click two or more nodes on ONE side (FX In or FX Out), then Enter: they become
     /// one linked node (stereo, or a wider group). Nothing else may be selected.
     /// </summary>
+    /// <summary>The selection is only FX In channels (or only FX Out channels), two or more.</summary>
+    private bool IsQuickChannelLinkSelection() =>
+        _quickGroupNodeSlots.Count == 0 && _quickGroupIds.Count == 0 && _quickGroupPluginChoices.Count == 0 &&
+        ((_quickConnectSourceEndpoints.Count >= 2 && _quickConnectDestinationEndpoints.Count == 0) ||
+         (_quickConnectDestinationEndpoints.Count >= 2 && _quickConnectSourceEndpoints.Count == 0));
+
     private bool TryCompleteQuickChannelLink()
     {
         if (_quickGroupNodeSlots.Count > 0 || _quickGroupIds.Count > 0 || _quickGroupPluginChoices.Count > 0)

@@ -48,6 +48,21 @@ When you change the count, the app restarts and asks Matrix to reset the driver.
 protocol and the bank naming (A–Z, then AA, AB, …) can go past 128 later. Only
 `MaxChannels` in the protocol and the engine would need to change.
 
+## Canvas Controls
+
+Settings > **Canvas Controls** (saved with the workspace):
+
+- **Box Selection** (on): drag on empty canvas to select nodes, groups, FX In/Out nodes and
+  cables. Ctrl-drag adds to the selection, Esc cancels. Release opens the selection menu.
+- **Automatic Grouping** (off): dropping a VST (or a browser/file drop) onto a VST or group
+  groups them. Off keeps grouping to the right-click **Create Group**.
+- **Automatic Routing** (off): when grouping loose VSTs, wire them in selection order and append
+  new loose members to the chain's tail. Existing wiring is always preserved.
+
+Ctrl-click builds an ordered selection and **Enter** connects it; it never groups. Two or more
+FX In (or FX Out) channels alone are linked into one node. Box-selected cables can be removed
+with **Delete** or **Remove Cables** without touching nodes.
+
 ## Timing
 
 The driver has no hardware, so it runs its own clock (MMCSS "Pro Audio" thread with a

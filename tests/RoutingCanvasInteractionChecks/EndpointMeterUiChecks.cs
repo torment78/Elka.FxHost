@@ -140,8 +140,8 @@ public partial class MainWindow
         _settings.PluginGroups.Add(testGroup);
         static IEnumerable<ComboBox> Targets(Window window) => Descendants(window).OfType<ComboBox>().Where(c => Grid.GetColumn(c) == 0);
         _editorHotkeys = new GlobalEditorHotkeys(new IntPtr(1), (_, _, _, _) => true, (_, _) => { });
-        var previousHandle = _voicemeeterCommandWindow;
-        _voicemeeterCommandWindow = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+        var previousHandle = _windowHandle;
+        _windowHandle = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
         try
         {
             InspectDialog(() => ShowHostSettings(this), () => _hostSettingsWindow, settings =>
@@ -265,7 +265,7 @@ public partial class MainWindow
         }
         finally
         {
-            _voicemeeterCommandWindow = previousHandle;
+            _windowHandle = previousHandle;
             _editorHotkeys.Dispose();
             _editorHotkeys = null;
             _settings.PluginGroups.Remove(testGroup);
