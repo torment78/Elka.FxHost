@@ -113,6 +113,10 @@ Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows
 
 [Run]
 Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{app}\{#AppExe}"""; StatusMsg: "Disabling Windows power throttling for Elka FX Host..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableFxHostPowerThrottling
+Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{code:MatrixExecutablePath|VBAudioMatrix_x64.exe}"""; StatusMsg: "Disabling Windows power throttling for VB-Audio Matrix (64-bit)..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableMatrixExecutable('VBAudioMatrix_x64.exe')
+Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{code:MatrixExecutablePath|VBAudioMatrix.exe}"""; StatusMsg: "Disabling Windows power throttling for VB-Audio Matrix (32-bit)..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableMatrixExecutable('VBAudioMatrix.exe')
+Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{code:MatrixExecutablePath|VBAudioMatrixCoconut_x64.exe}"""; StatusMsg: "Disabling Windows power throttling for VB-Audio Matrix Coconut (64-bit)..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableMatrixExecutable('VBAudioMatrixCoconut_x64.exe')
+Filename: "{sys}\powercfg.exe"; Parameters: "/powerthrottling disable /path ""{code:MatrixExecutablePath|VBAudioMatrixCoconut.exe}"""; StatusMsg: "Disabling Windows power throttling for VB-Audio Matrix Coconut (32-bit)..."; Flags: runhidden waituntilterminated logoutput; Check: ShouldDisableMatrixExecutable('VBAudioMatrixCoconut.exe')
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,Elka FX Host}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
@@ -127,6 +131,8 @@ var
   MatrixRadio, CoconutRadio, CustomRadio: TNewRadioButton;
   CustomCombo: TNewComboBox;
   PerformanceOptionsPage: TInputOptionWizardPage;
+  MatrixEditionPage: TInputOptionWizardPage;
+  MatrixEditionDefaulted: Boolean;
   WelcomeLogo, FinishedLogo: TBitmapImage;
 
 function SanitizeChannelCount(Value: Integer): Integer;
@@ -285,12 +291,78 @@ begin
     False);
   PerformanceOptionsPage.Add('Elka FX Host (recommended)');
   PerformanceOptionsPage.Values[0] := True;
+
+  // Which Matrix is used: Windows power throttling is turned off for that one too.
+  MatrixEditionPage := CreateInputOptionPage(
+    PerformanceOptionsPage.ID,
+    'Performance Options',
+    'Are you using VB-Audio Matrix or VB-Audio Matrix Coconut?',
+    'Setup turns off Windows power throttling for the one you use, so Windows keeps it at full performance next to FX Host.',
+    True,
+    False);
+  MatrixEditionPage.Add('VB-Audio Matrix');
+  MatrixEditionPage.Add('VB-Audio Matrix Coconut');
+  MatrixEditionPage.Add('Neither / leave Matrix unchanged');
+  MatrixEditionPage.SelectedValueIndex := 2;
+end;
+
+function MatrixFolder: string;
+begin
+  Result := ExpandConstant('{commonpf32}\VB\VBAudioMatrix');
+  if not DirExists(Result) then
+    Result := ExpandConstant('{commonpf64}\VB\VBAudioMatrix');
+end;
+
+function MatrixExecutablePath(Param: string): string;
+begin
+  Result := AddBackslash(MatrixFolder) + Param;
+end;
+
+function MatrixEditionInstalled(Coconut: Boolean): Boolean;
+begin
+  if Coconut then
+    Result := FileExists(MatrixExecutablePath('VBAudioMatrixCoconut_x64.exe')) or
+      FileExists(MatrixExecutablePath('VBAudioMatrixCoconut.exe'))
+  else
+    Result := FileExists(MatrixExecutablePath('VBAudioMatrix_x64.exe')) or
+      FileExists(MatrixExecutablePath('VBAudioMatrix.exe'));
+end;
+
+// First visit: preselect the edition picked on the channel page (32 = Matrix, 64 = Coconut),
+// otherwise whichever one is installed. The user can change it.
+procedure DefaultMatrixEdition;
+begin
+  if MatrixEditionDefaulted then
+    exit;
+  MatrixEditionDefaulted := True;
+  if CoconutRadio.Checked and MatrixEditionInstalled(True) then
+    MatrixEditionPage.SelectedValueIndex := 1
+  else if MatrixRadio.Checked and MatrixEditionInstalled(False) then
+    MatrixEditionPage.SelectedValueIndex := 0
+  else if MatrixEditionInstalled(True) then
+    MatrixEditionPage.SelectedValueIndex := 1
+  else if MatrixEditionInstalled(False) then
+    MatrixEditionPage.SelectedValueIndex := 0
+  else
+    MatrixEditionPage.SelectedValueIndex := 2;
+end;
+
+function ShouldDisableMatrixExecutable(const ExecutableName: string): Boolean;
+var
+  IsCoconut: Boolean;
+begin
+  IsCoconut := Pos('Coconut', ExecutableName) > 0;
+  Result := FileExists(MatrixExecutablePath(ExecutableName)) and
+    (((MatrixEditionPage.SelectedValueIndex = 0) and not IsCoconut) or
+     ((MatrixEditionPage.SelectedValueIndex = 1) and IsCoconut));
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
 var
   Channels: Integer;
 begin
+  if CurPageID = MatrixEditionPage.ID then
+    DefaultMatrixEdition;
   if CurPageID = wpFinished then
   begin
     Channels := SelectedChannelCount;
