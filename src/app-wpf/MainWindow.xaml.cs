@@ -125,6 +125,8 @@ public partial class MainWindow : Window
     private const int GroupSidechainPinBase = 100;
     private readonly RoutingCanvasViewport _vstCanvasViewport = new();
     private bool _canvasRebuildAfterDrag;
+    private readonly List<UIElement> _canvasWireElements = [];
+    private readonly Dictionary<string, Point> _endpointDragPinOrigins = new(StringComparer.Ordinal);
     private const double VstCanvasWallMargin = 24.0;
     private const double VstEndpointStackTop = 57.0;
     private const double VstEndpointCardWidth = 112.0;
@@ -6182,18 +6184,19 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        if (!_engine.HasAudioClock)
+        // Matrix may not be running when FX Host starts. Plugins load without its clock (as when
+        // you add a VST) and are prepared when Matrix starts, so the saved graph is never left
+        // unrestored: that disabled Back and let new VSTs take the unrestored nodes' slots.
+        // While Matrix is streaming, wait briefly for its clock first.
+        if (!_engine.HasAudioClock && _engine.IsAsioDriverStreaming &&
+            _savedPluginRestoreAttempts++ < MaxSavedPluginRestoreAttempts)
         {
-            if (_savedPluginRestoreAttempts++ < MaxSavedPluginRestoreAttempts)
-            {
-                _pluginRestoreTimer.Start();
-                return;
-            }
-
-            AppendLog("Saved VST graph was not restored yet because the ASIO link has no audio clock yet.");
+            _pluginRestoreTimer.Start();
             return;
         }
 
+        if (!_engine.HasAudioClock)
+            AppendLog("Restoring the saved VST graph before Matrix starts; plugins are prepared when Matrix opens the device.");
         RestoreSavedPluginNodes(pluginChoices);
     }
 
@@ -7402,12 +7405,30 @@ private void RefreshEndpointButtonSelection()
         DrawPluginGroups();
         DrawPluginNodes();
         ApplyCanvasCardStacking();
-        DrawDefaultPassthroughConnections();
-        DrawMirroredChannelRoutes();
-        DrawCanvasConnections();
+        DrawCanvasWires();
         QueueEndpointMeterUpdate();
         UpdateRouteSummary();
         RebuildVstNodeList();
+    }
+
+    /// <summary>Draws guides, direct routes and cables, remembering them so they can be redrawn alone.</summary>
+    private void DrawCanvasWires()
+    {
+        var before = new HashSet<UIElement>(RoutingCanvas.Children.Cast<UIElement>());
+        DrawDefaultPassthroughConnections();
+        DrawMirroredChannelRoutes();
+        DrawCanvasConnections();
+        _canvasWireElements.Clear();
+        foreach (UIElement child in RoutingCanvas.Children)
+            if (!before.Contains(child)) _canvasWireElements.Add(child);
+    }
+
+    /// <summary>Redraws only the wires (for example while an FX In/Out node moves), not the cards.</summary>
+    private void RedrawCanvasWires()
+    {
+        foreach (var element in _canvasWireElements) RoutingCanvas.Children.Remove(element);
+        _canvasConnectionPaths.Clear();
+        DrawCanvasWires();
     }
 
     private void DrawCanvasCards()
@@ -7671,10 +7692,20 @@ private void RefreshEndpointButtonSelection()
 
     private bool EndpointIsVisibleOnCurrentCanvas(CallbackMode mode, bool outputSide) =>
         CanvasEndpointMode(outputSide) == mode;
+    /// <summary>
+    /// A canvas rebuild draws every FX In/Out card (up to 256), and building their menus up
+    /// front cost most of the rebuild. The menu is built on right-click instead, so it always
+    /// shows the current cables and links.
+    /// </summary>
+    private static void AttachLazyContextMenu(FrameworkElement element, Func<ContextMenu> build)
+    {
+        element.ContextMenu = new ContextMenu();
+        element.ContextMenuOpening += (_, _) => element.ContextMenu = build();
+    }
+
     private void DrawEndpointCard(IoEndpoint endpoint, CallbackMode mode, double x, double y, bool outputSide, int pinCount)
     {
         var height = VstEndpointCardHeight(mode, endpoint, pinCount);
-        var endpointMenu = BuildEndpointContextMenu(mode, endpoint, outputSide);
         var endpointKey = endpoint.Key(mode);
         var displayHue = EndpointDisplayHue(mode, endpoint, outputSide);
         var hueStroke = HueStrokeBrush(displayHue);
@@ -7698,9 +7729,9 @@ private void RefreshEndpointButtonSelection()
                 ? new Thickness(2)
                 : hueStroke is null ? new Thickness(1) : new Thickness(2),
             CornerRadius = new CornerRadius(6),
-            ContextMenu = endpointMenu,
             Tag = new EndpointDragInfo(mode, endpoint, outputSide)
         };
+        AttachLazyContextMenu(border, () => BuildEndpointContextMenu(mode, endpoint, outputSide));
         Canvas.SetLeft(border, x);
         Canvas.SetTop(border, y);
         border.MouseLeftButtonDown += EndpointCard_MouseLeftButtonDown;
@@ -7765,8 +7796,8 @@ private void RefreshEndpointButtonSelection()
                 StrokeThickness = 1.5,
                 Cursor = Cursors.Hand,
                 Tag = pinInfo,
-                ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide))
             };
+            AttachLazyContextMenu(pin, () => BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide)));
             AttachPinHandlers(pin);
             Canvas.SetLeft(pin, pinX - 5);
             Canvas.SetTop(pin, pinY - 5);
@@ -7780,8 +7811,8 @@ private void RefreshEndpointButtonSelection()
                 Width = EndpointPinLabelWidth,
                 TextAlignment = TextAlignment.Center,
                 Foreground = hueStroke ?? (Brush)FindResource("MutedTextBrush"),
-                ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide))
             };
+            AttachLazyContextMenu(label, () => BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide)));
             Canvas.SetLeft(label, outputSide ? pinX + EndpointPinLabelOffset : pinX - EndpointPinLabelOffset - EndpointPinLabelWidth);
             Canvas.SetTop(label, pinY - 8);
             RoutingCanvas.Children.Add(label);
@@ -12699,6 +12730,12 @@ private void RefreshEndpointButtonSelection()
         _endpointDragStartOffset = EndpointCanvasYOffset(_draggingEndpointKey);
         _endpointDragMoved = false;
         CaptureDragOrigins(_endpointVisualElements.TryGetValue(_draggingEndpointKey, out var elements) ? elements : [border]);
+        _endpointDragPinOrigins.Clear();
+        foreach (var channel in info.Endpoint.Range.Channels)
+        {
+            var key = info.OutputSide ? EndpointDestinationKey(info.Mode, channel) : EndpointSourceKey(info.Mode, channel);
+            if (_pinPositions.TryGetValue(key, out var point)) _endpointDragPinOrigins[key] = point;
+        }
         border.CaptureMouse();
         e.Handled = true;
     }
@@ -12715,7 +12752,13 @@ private void RefreshEndpointButtonSelection()
             return;
         }
 
-        var deltaY = e.GetPosition(RoutingCanvas).Y - _endpointDragStartPoint.Y;
+        MoveDraggedEndpoint(e.GetPosition(RoutingCanvas).Y - _endpointDragStartPoint.Y);
+        e.Handled = true;
+    }
+
+    private void MoveDraggedEndpoint(double deltaY)
+    {
+        if (_draggingEndpointKey is null) return;
         if (Math.Abs(deltaY) > 2.0)
         {
             _endpointDragMoved = true;
@@ -12724,8 +12767,11 @@ private void RefreshEndpointButtonSelection()
         var offset = Math.Max(-320.0, _endpointDragStartOffset + deltaY);
         _settings.EndpointCanvasYOffsets[_draggingEndpointKey] = offset;
         MoveDragElements(0, offset - _endpointDragStartOffset);
+        // Cables follow the node while it moves; the cards are not rebuilt.
+        foreach (var (key, origin) in _endpointDragPinOrigins)
+            _pinPositions[key] = new Point(origin.X, origin.Y + offset - _endpointDragStartOffset);
+        RedrawCanvasWires();
         UpdateVstCanvasSize();
-        e.Handled = true;
     }
 
     private void EndpointCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -12746,7 +12792,9 @@ private void RefreshEndpointButtonSelection()
         }
         else
         {
-            RebuildRoutingCanvas();
+            // Already in place with its cables: no full canvas rebuild (that made the canvas blink).
+            if (_canvasRebuildAfterDrag) RebuildRoutingCanvas();
+            else UpdateVstCanvasSize();
             QueueSave();
         }
 
@@ -12771,6 +12819,7 @@ private void RefreshEndpointButtonSelection()
         _draggingEndpointMode = CallbackMode.None;
         _endpointDragMoved = false;
         _dragElementOrigins.Clear();
+        _endpointDragPinOrigins.Clear();
     }
 
     private void CaptureDragOrigins(IEnumerable<FrameworkElement> elements)

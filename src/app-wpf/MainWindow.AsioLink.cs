@@ -72,6 +72,7 @@ public partial class MainWindow
         {
             UpdateAsioDriverDisplay();
             AppendLog(_lastAsioDriverStreaming ? "Matrix started the Elka FX Host ASIO device." : "Matrix stopped the Elka FX Host ASIO device.");
+            if (_lastAsioDriverStreaming) QueueSavedPluginNodeRestore();
         }
 
         var status = _engine.AsioLinkStatus();

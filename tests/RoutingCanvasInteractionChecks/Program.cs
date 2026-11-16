@@ -79,6 +79,7 @@ internal static class CanvasInteractionChecks
             if (args.Contains("--group-selection")) { window.CheckGroupCanvasSelection(); return 0; }
             if (args.Contains("--node-names")) { window.CheckNodeNames(); return 0; }
             if (args.Contains("--routing-hues")) { window.CheckRoutingHues(); return 0; }
+            if (args.Contains("--endpoint-drag")) { window.CheckEndpointDrag(); return 0; }
             if (args.Contains("--compact-nodes")) { window.CheckCompactNodes(); return 0; }
             if (args.Contains("--endpoint-layout")) { window.CheckFxEndpointLayout(); return 0; }
             if (args.Contains("--canvas-states")) { window.CheckCanvasStateVisuals(); return 0; }
@@ -103,6 +104,7 @@ internal static class CanvasInteractionChecks
             window.CheckRoutingHues();
             window.CheckCompactNodes();
             window.CheckFxEndpointLayout();
+            window.CheckEndpointDrag();
             window.CheckTrayMenuTheme();
             window.CheckFloatingPanel();
             window.CheckWidgetTileStates();
