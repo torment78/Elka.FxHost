@@ -75,8 +75,12 @@ internal static class CanvasInteractionChecks
             window.Show();
             if (args.Contains("--plugin-browser")) { window.CheckPluginBrowser(); return 0; }
             if (args.Contains("--canvas-controls")) { window.CheckCanvasControls(); return 0; }
+            if (args.Contains("--group-boundaries")) { window.CheckGroupBoundaryUi(); return 0; }
+            if (args.Contains("--group-selection")) { window.CheckGroupCanvasSelection(); return 0; }
             if (args.Contains("--node-names")) { window.CheckNodeNames(); return 0; }
             if (args.Contains("--routing-hues")) { window.CheckRoutingHues(); return 0; }
+            if (args.Contains("--compact-nodes")) { window.CheckCompactNodes(); return 0; }
+            if (args.Contains("--endpoint-layout")) { window.CheckFxEndpointLayout(); return 0; }
             if (args.Contains("--canvas-states")) { window.CheckCanvasStateVisuals(); return 0; }
             if (args.Contains("--output-boost")) { window.CheckOutputBoostUi(); return 0; }
             if (args.Contains("--rollback")) { window.CheckRollbackUi(); return 0; }
@@ -91,10 +95,14 @@ internal static class CanvasInteractionChecks
             window.CheckHotkeyActions();
             window.CheckEndpointHotkeys();
             window.CheckGroupChainUi();
+            window.CheckGroupBoundaryUi();
+            window.CheckGroupCanvasSelection();
             window.CheckQuickConnectionChains();
             window.CheckCanvasControls();
             window.CheckNodeNames();
             window.CheckRoutingHues();
+            window.CheckCompactNodes();
+            window.CheckFxEndpointLayout();
             window.CheckTrayMenuTheme();
             window.CheckFloatingPanel();
             window.CheckWidgetTileStates();

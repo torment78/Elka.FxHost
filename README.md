@@ -54,10 +54,14 @@ Settings > **Canvas Controls** (saved with the workspace):
 
 - **Box Selection** (on): drag on empty canvas to select nodes, groups, FX In/Out nodes and
   cables. Ctrl-drag adds to the selection, Esc cancels. Release opens the selection menu.
+  It works inside group editors too: select member VSTs and cables, drag a selected VST to
+  move the selection together, or remove cables without removing VSTs.
 - **Automatic Grouping** (off): dropping a VST (or a browser/file drop) onto a VST or group
   groups them. Off keeps grouping to the right-click **Create Group**.
 - **Automatic Routing** (off): when grouping loose VSTs, wire them in selection order and append
-  new loose members to the chain's tail. Existing wiring is always preserved.
+  new loose members to the chain's tail. Existing wiring is always preserved. With it off,
+  a new group still maps its edges to the first member's inputs and last member's outputs,
+  so the group can be wired later, but no cables are added between VSTs.
 
 Ctrl-click builds an ordered selection and **Enter** connects it; it never groups. Two or more
 FX In (or FX Out) channels alone are linked into one node. Box-selected cables can be removed

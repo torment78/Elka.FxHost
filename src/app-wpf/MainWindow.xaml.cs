@@ -127,12 +127,21 @@ public partial class MainWindow : Window
     private bool _canvasRebuildAfterDrag;
     private const double VstCanvasWallMargin = 24.0;
     private const double VstEndpointStackTop = 57.0;
-    private const double VstEndpointCardWidth = 124.0;
-    private const double VstNodeWidth = 138.0;
+    private const double VstEndpointCardWidth = 112.0;
+    private const double VstNodeWidth = 108.0;
     private const double VstGroupWidth = VstNodeWidth;
     private const double VstCardPinInset = 12.0;
     private const double VstCardPinTopOffset = 38.0;
     private const double VstCardPinRowSpacing = 13.0;
+    private const double VstPluginCardVerticalTrim = 3.0;
+    private const double VstPinLabelOffset = 8.0;
+    private const double VstPinLabelWidth = 16.0;
+    private const double VstPinTextTopOffset = 7.0;
+    // FX Host labels are two characters ("A1".."P8"); the centre stays 14 DIPs from the contact.
+    private const double EndpointPinLabelOffset = 6.0;
+    private const double EndpointPinLabelWidth = 16.0;
+    private const double EndpointMeterLabelGap = 0.0;
+    private const double EndpointMeterOuterInset = 8.0;
     private const int CollapsedVisiblePinCount = 2;
     private const int MaxPluginInstanceIds = 200;
     private const int MaxSavedPluginRestoreAttempts = 80;
@@ -7456,6 +7465,7 @@ private void RefreshEndpointButtonSelection()
             var node = _settings.PluginNodes.FirstOrDefault(candidate => candidate.Slot == slot);
             border.BorderBrush = node is null ? (Brush)FindResource("RouteAccentBrush") : PluginCardOutline(node, selected);
             border.BorderThickness = new Thickness(selected || (node is not null && IsPluginFailed(node)) ? 2 : 1);
+            AlignCanvasCardText(border);
         }
         foreach (var group in _settings.PluginGroups.Where(GroupBelongsToCurrentCanvas))
         {
@@ -7465,6 +7475,7 @@ private void RefreshEndpointButtonSelection()
             var selected = _selectedPluginGroupId == group.Id || _quickGroupIds.Contains(group.Id);
             border.BorderBrush = GroupCardOutline(group, selected);
             border.BorderThickness = new Thickness(selected || GroupMembers(group).Any(IsPluginFailed) ? 2 : 1);
+            AlignCanvasCardText(border);
         }
     }
 
@@ -7507,11 +7518,26 @@ private void RefreshEndpointButtonSelection()
     private static double VstCardPinY(double y, int row) =>
         y + VstCardPinTopOffset + (row * VstCardPinRowSpacing);
 
+    private static double VstPluginCardPinY(double y, int row) =>
+        VstCardPinY(y, row) - VstPluginCardVerticalTrim;
+
+    private static double VstPluginCardHeightForPinCount(int pinCount) =>
+        VstEndpointCardHeightForPinCount(pinCount) - (2 * VstPluginCardVerticalTrim);
+
+    private static void AlignCanvasCardText(Border card)
+    {
+        // Selection changes the outline, not the text's position inside the compact card.
+        card.Padding = new Thickness(8 - card.BorderThickness.Left,
+            8 - VstPluginCardVerticalTrim - card.BorderThickness.Top,
+            8 - card.BorderThickness.Right,
+            8 - VstPluginCardVerticalTrim - card.BorderThickness.Bottom);
+    }
+
     private static double VstCardInputPinX(double x) =>
-        x + VstCardPinInset;
+        x;
 
     private static double VstCardOutputPinX(double x, double width) =>
-        x + width - VstCardPinInset;
+        x + width;
 
     private static double VstEndpointCardSpacing(int pinCount) =>
         VstEndpointCardHeightForPinCount(pinCount) + 18.0;
@@ -7717,7 +7743,7 @@ private void RefreshEndpointButtonSelection()
         for (var offset = 0; offset < pinCount; offset++)
         {
             var pinY = VstCardPinY(y, offset);
-            var pinX = outputSide ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstEndpointCardWidth);
+            var pinX = outputSide ? x + VstCardPinInset : x + VstEndpointCardWidth - VstCardPinInset;
             var channel = endpoint.Range.ChannelAt(offset);
             var pinInfo = new CanvasPinInfo
             {
@@ -7751,10 +7777,12 @@ private void RefreshEndpointButtonSelection()
             {
                 Text = FxHostEdition.ChannelShortName(endpoint.Range.ChannelAt(offset)),
                 FontSize = 11,
+                Width = EndpointPinLabelWidth,
+                TextAlignment = TextAlignment.Center,
                 Foreground = hueStroke ?? (Brush)FindResource("MutedTextBrush"),
                 ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildEndpointContextMenu(mode, endpoint, outputSide))
             };
-            Canvas.SetLeft(label, outputSide ? x + VstCardPinInset + 16 : x + VstEndpointCardWidth - VstCardPinInset - 26);
+            Canvas.SetLeft(label, outputSide ? pinX + EndpointPinLabelOffset : pinX - EndpointPinLabelOffset - EndpointPinLabelWidth);
             Canvas.SetTop(label, pinY - 8);
             RoutingCanvas.Children.Add(label);
             endpointElements.Add(label);
@@ -7777,7 +7805,7 @@ private void RefreshEndpointButtonSelection()
             var channel = endpoint.Range.ChannelAt(offset);
             var anchorOffset = Math.Min(offset % CollapsedVisiblePinCount, visiblePinCount - 1);
             var point = new Point(
-                outputSide ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstEndpointCardWidth),
+                outputSide ? x + VstCardPinInset : x + VstEndpointCardWidth - VstCardPinInset,
                 VstCardPinY(y, anchorOffset));
             var pinInfo = new CanvasPinInfo
             {
@@ -7935,12 +7963,14 @@ private void RefreshEndpointButtonSelection()
 
         var elements = new List<FrameworkElement> { border };
         _groupVisualElements[group.Id] = elements;
+        AlignCanvasCardText(border);
 
         var stack = new StackPanel();
         border.Child = stack;
         stack.Children.Add(new TextBlock
         {
             Text = group.Name,
+            Height = VstCardPinTopOffset - VstPluginCardVerticalTrim - 5 - VstPinTextTopOffset,
             FontWeight = FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
@@ -7950,8 +7980,11 @@ private void RefreshEndpointButtonSelection()
             Style = (Style)FindResource("MutedText"),
             Foreground = members.Any(IsPluginFailed) ? FailureBrush : (Brush)FindResource("MutedTextBrush"),
             FontSize = 10,
-            LineHeight = 11,
-            Margin = new Thickness(24, 2, 24, 0),
+            LineHeight = VstCardPinRowSpacing,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            Margin = new Thickness(VstPinLabelWidth + 2, 0, VstPinLabelWidth + 2, 0),
+            TextWrapping = TextWrapping.Wrap,
+            ToolTip = GroupStatusText(members),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis
@@ -7974,7 +8007,7 @@ private void RefreshEndpointButtonSelection()
     private void DrawGroupPin(PluginGroupSnapshot group, int groupPin, int row, bool input)
     {
         var x = input ? VstCardInputPinX(group.X) : VstCardOutputPinX(group.X, VstGroupWidth);
-        var y = VstCardPinY(group.Y, row);
+        var y = VstPluginCardPinY(group.Y, row);
         var pinLabel = GroupPinLabel(group, groupPin, input);
         var pinInfo = ResolveGroupCanvasPin(group, groupPin, input, new Point(x, y), pinLabel);
         _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
@@ -7982,15 +8015,15 @@ private void RefreshEndpointButtonSelection()
         var groupMenu = BuildGroupContextMenu(group);
         var pin = new Ellipse
         {
-            Width = 12,
-            Height = 12,
+            Width = 10,
+            Height = 10,
             Fill = (Brush)FindResource("PanelBrush"),
             Stroke = input
                 ? (Brush)FindResource("DelayAccentBrush")
                 : pinInfo.Node is not null
                     ? HueStrokeBrush(SourceHueKeyForNode(pinInfo.Node.Slot, [])) ?? (Brush)FindResource("RouteAccentBrush")
                     : (Brush)FindResource("RouteAccentBrush"),
-            StrokeThickness = 2,
+            StrokeThickness = 1.5,
             Cursor = Cursors.Hand,
             Tag = pinInfo,
             ContextMenu = BuildCanvasPinContextMenu(pinInfo, groupMenu),
@@ -7999,8 +8032,8 @@ private void RefreshEndpointButtonSelection()
                 : pinInfo.Label
         };
         AttachPinHandlers(pin);
-        Canvas.SetLeft(pin, x - 6);
-        Canvas.SetTop(pin, y - 6);
+        Canvas.SetLeft(pin, x - 5);
+        Canvas.SetTop(pin, y - 5);
         RoutingCanvas.Children.Add(pin);
         _groupVisualElements[group.Id].Add(pin);
 
@@ -8008,12 +8041,17 @@ private void RefreshEndpointButtonSelection()
         {
             Text = pinLabel,
             FontSize = 10,
+            Width = VstPinLabelWidth,
+            Height = VstCardPinRowSpacing,
+            LineHeight = VstCardPinRowSpacing,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            TextAlignment = input ? TextAlignment.Left : TextAlignment.Right,
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("MutedTextBrush"),
             IsHitTestVisible = false
         };
-        Canvas.SetLeft(label, input ? x + 16 : x - 26);
-        Canvas.SetTop(label, y - 8);
+        Canvas.SetLeft(label, input ? x + VstPinLabelOffset : x - VstPinLabelOffset - VstPinLabelWidth);
+        Canvas.SetTop(label, y - VstPinTextTopOffset);
         RoutingCanvas.Children.Add(label);
         _groupVisualElements[group.Id].Add(label);
     }
@@ -8043,7 +8081,7 @@ private void RefreshEndpointButtonSelection()
 
             var point = new Point(
                 input ? VstCardInputPinX(group.X) : VstCardOutputPinX(group.X, VstGroupWidth),
-                VstCardPinY(group.Y, row));
+                VstPluginCardPinY(group.Y, row));
             var pinInfo = ResolveGroupCanvasPin(group, pin, input, point, GroupPinLabel(group, pin, input));
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
         }
@@ -8075,7 +8113,7 @@ private void RefreshEndpointButtonSelection()
         };
 
         Canvas.SetLeft(summary, group.X + 8);
-        Canvas.SetTop(summary, group.Y + height - 18);
+        Canvas.SetTop(summary, group.Y + height - 17 + VstPluginCardVerticalTrim);
         RoutingCanvas.Children.Add(summary);
         _groupVisualElements[group.Id].Add(summary);
     }
@@ -8540,7 +8578,7 @@ private void RefreshEndpointButtonSelection()
 
     private static double VstGroupHeight(int pinRows)
     {
-        return VstEndpointCardHeightForPinCount(Math.Max(1, pinRows));
+        return VstPluginCardHeightForPinCount(Math.Max(1, pinRows));
     }
 
     private static IEnumerable<int> GroupInputPinIds(PluginGroupSnapshot group)
@@ -8647,12 +8685,14 @@ private void RefreshEndpointButtonSelection()
             Canvas.SetTop(border, node.Y);
             RoutingCanvas.Children.Add(border);
             _nodeVisualElements[node.Slot].Add(border);
+            AlignCanvasCardText(border);
 
             var stack = new StackPanel();
             border.Child = stack;
             stack.Children.Add(new TextBlock
             {
                 Text = node.DisplayName,
+                Height = VstCardPinTopOffset - VstPluginCardVerticalTrim - 5 - VstPinTextTopOffset,
                 ToolTip = node.DisplayName == node.Name ? node.Name : $"{node.DisplayName}\n{node.Name}",
                 FontWeight = FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis
@@ -8664,8 +8704,10 @@ private void RefreshEndpointButtonSelection()
                 Foreground = IsPluginFailed(node) ? FailureBrush : (Brush)FindResource("MutedTextBrush"),
                 TextWrapping = IsPluginFailed(node) ? TextWrapping.Wrap : TextWrapping.NoWrap,
                 FontSize = 10,
-                LineHeight = 11,
-                Margin = new Thickness(34, 2, 34, 0),
+                LineHeight = VstCardPinRowSpacing,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                Margin = new Thickness(VstPinLabelWidth + 2, 0, VstPinLabelWidth + 2, 0),
+                ToolTip = NodePinSummary(node),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 TextAlignment = TextAlignment.Center,
                 TextTrimming = IsPluginFailed(node) ? TextTrimming.None : TextTrimming.CharacterEllipsis
@@ -8673,12 +8715,12 @@ private void RefreshEndpointButtonSelection()
 
             for (var row = 0; row < inputPins.Count; row++)
             {
-                DrawNodePin(node, inputPins[row], VstCardInputPinX(node.X), VstCardPinY(node.Y, row), input: true);
+                DrawNodePin(node, inputPins[row], VstCardInputPinX(node.X), VstPluginCardPinY(node.Y, row), input: true);
             }
 
             for (var row = 0; row < outputPins.Count; row++)
             {
-                DrawNodePin(node, outputPins[row], VstCardOutputPinX(node.X, VstNodeWidth), VstCardPinY(node.Y, row), input: false);
+                DrawNodePin(node, outputPins[row], VstCardOutputPinX(node.X, VstNodeWidth), VstPluginCardPinY(node.Y, row), input: false);
             }
 
             RegisterHiddenNodePinAnchors(node, inputPins, outputPins);
@@ -8884,7 +8926,8 @@ private void RefreshEndpointButtonSelection()
             {
                 var hue = node is null ? GroupDisplayHue(group) : FindNodeRouteHue(node.Slot, []);
                 return (HueStrokeBrush(hue), HueFillBrush(hue));
-            })
+            },
+            boxSelectionEnabled: () => _settings.CanvasBoxSelectionEnabled)
         {
             Owner = this
         };
@@ -9375,7 +9418,7 @@ private void RefreshEndpointButtonSelection()
     {
         if (IsPluginFailed(node)) return "FAILED - Reload";
         return node.SidechainInputPins > 0
-            ? $"{node.MainInputPins} in + {node.SidechainInputPins} sc\n{node.OutputPins} out"
+            ? $"{node.MainInputPins} in\n{node.OutputPins} out\n{node.SidechainInputPins} sc"
             : $"{node.InputPins} in\n{node.OutputPins} out";
     }
 
@@ -9824,22 +9867,22 @@ private void RefreshEndpointButtonSelection()
 
         var pin = new Ellipse
         {
-            Width = 12,
-            Height = 12,
+            Width = 10,
+            Height = 10,
             Fill = NodeBackgroundBrush(node),
             Stroke = input
                 ? IsSidechainVisualInputPin(node, pinIndex)
                     ? (Brush)FindResource("DelayAccentBrush")
                     : nodeHueStroke ?? (Brush)FindResource("DelayAccentBrush")
                 : nodeHueStroke ?? (Brush)FindResource("RouteAccentBrush"),
-            StrokeThickness = 2,
+            StrokeThickness = 1.5,
             Cursor = Cursors.Hand,
             Tag = pinInfo,
             ContextMenu = BuildCanvasPinContextMenu(pinInfo, BuildNodeContextMenu(node))
         };
         AttachPinHandlers(pin);
-        Canvas.SetLeft(pin, x - 6);
-        Canvas.SetTop(pin, y - 6);
+        Canvas.SetLeft(pin, x - 5);
+        Canvas.SetTop(pin, y - 5);
         RoutingCanvas.Children.Add(pin);
         if (pinInfo.Node is not null && _nodeVisualElements.TryGetValue(pinInfo.Node.Slot, out var elements))
         {
@@ -9850,14 +9893,19 @@ private void RefreshEndpointButtonSelection()
         {
             Text = labelText,
             FontSize = 10,
+            Width = VstPinLabelWidth,
+            Height = VstCardPinRowSpacing,
+            LineHeight = VstCardPinRowSpacing,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            TextAlignment = input ? TextAlignment.Left : TextAlignment.Right,
             FontWeight = FontWeights.SemiBold,
             Foreground = input && IsSidechainVisualInputPin(node, pinIndex)
                 ? (Brush)FindResource("DelayAccentBrush")
                 : (Brush)FindResource("MutedTextBrush"),
             IsHitTestVisible = false
         };
-        Canvas.SetLeft(label, input ? x + 16 : x - 26);
-        Canvas.SetTop(label, y - 8);
+        Canvas.SetLeft(label, input ? x + VstPinLabelOffset : x - VstPinLabelOffset - VstPinLabelWidth);
+        Canvas.SetTop(label, y - VstPinTextTopOffset);
         RoutingCanvas.Children.Add(label);
         if (pinInfo.Node is not null && _nodeVisualElements.TryGetValue(pinInfo.Node.Slot, out elements))
         {
@@ -9898,7 +9946,7 @@ private void RefreshEndpointButtonSelection()
                 Pin = pin,
                 Point = new Point(
                     input ? VstCardInputPinX(node.X) : VstCardOutputPinX(node.X, VstNodeWidth),
-                    VstCardPinY(node.Y, row)),
+                    VstPluginCardPinY(node.Y, row)),
                 Label = $"{node.DisplayName} {(input ? "in" : "out")} {(input ? NodeInputPinLabel(node, pin) : NodeOutputPinLabel(node, pin))}"
             };
             _pinPositions[PinPositionKey(pinInfo)] = pinInfo.Point;
@@ -9931,7 +9979,7 @@ private void RefreshEndpointButtonSelection()
         };
 
         Canvas.SetLeft(summary, node.X + 8);
-        Canvas.SetTop(summary, node.Y + nodeHeight - 18);
+        Canvas.SetTop(summary, node.Y + nodeHeight - 17 + VstPluginCardVerticalTrim);
         RoutingCanvas.Children.Add(summary);
         if (_nodeVisualElements.TryGetValue(node.Slot, out var elements))
         {
@@ -10971,7 +11019,7 @@ private void RefreshEndpointButtonSelection()
     private static double VstNodeHeight(PluginNodeSnapshot node)
     {
         var pinRows = Math.Max(VisibleNodeInputPinIds(node).Count(), VisibleNodeOutputPinIds(node).Count());
-        return VstEndpointCardHeightForPinCount(Math.Max(1, pinRows));
+        return VstPluginCardHeightForPinCount(Math.Max(1, pinRows));
     }
 
     private bool HasVstGraphRoute(int sourceChannel, int destinationChannel)
@@ -11781,12 +11829,12 @@ private void RefreshEndpointButtonSelection()
         var visibleOutputPins = VisibleNodeOutputPinIds(node).ToList();
         for (var row = 0; row < visibleInputPins.Count; row++)
         {
-            _pinPositions[NodeInputKey(node.Slot, visibleInputPins[row])] = new Point(VstCardInputPinX(x), VstCardPinY(y, row));
+            _pinPositions[NodeInputKey(node.Slot, visibleInputPins[row])] = new Point(VstCardInputPinX(x), VstPluginCardPinY(y, row));
         }
 
         for (var row = 0; row < visibleOutputPins.Count; row++)
         {
-            _pinPositions[NodeOutputKey(node.Slot, visibleOutputPins[row])] = new Point(VstCardOutputPinX(x, VstNodeWidth), VstCardPinY(y, row));
+            _pinPositions[NodeOutputKey(node.Slot, visibleOutputPins[row])] = new Point(VstCardOutputPinX(x, VstNodeWidth), VstPluginCardPinY(y, row));
         }
 
         UpdateHiddenNodePinPositionCache(node, visibleInputPins, input: true, x, y);
@@ -11815,7 +11863,7 @@ private void RefreshEndpointButtonSelection()
             var key = input ? NodeInputKey(node.Slot, pin) : NodeOutputKey(node.Slot, pin);
             _pinPositions[key] = new Point(
                 input ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstNodeWidth),
-                VstCardPinY(y, row));
+                VstPluginCardPinY(y, row));
         }
     }
 
@@ -11825,12 +11873,12 @@ private void RefreshEndpointButtonSelection()
         var visibleOutputPins = VisibleGroupOutputPinIds(group).ToList();
         for (var row = 0; row < visibleInputPins.Count; row++)
         {
-            _pinPositions[GroupInputKey(group.Id, visibleInputPins[row])] = new Point(VstCardInputPinX(x), VstCardPinY(y, row));
+            _pinPositions[GroupInputKey(group.Id, visibleInputPins[row])] = new Point(VstCardInputPinX(x), VstPluginCardPinY(y, row));
         }
 
         for (var row = 0; row < visibleOutputPins.Count; row++)
         {
-            _pinPositions[GroupOutputKey(group.Id, visibleOutputPins[row])] = new Point(VstCardOutputPinX(x, VstGroupWidth), VstCardPinY(y, row));
+            _pinPositions[GroupOutputKey(group.Id, visibleOutputPins[row])] = new Point(VstCardOutputPinX(x, VstGroupWidth), VstPluginCardPinY(y, row));
         }
 
         UpdateHiddenGroupPinPositionCache(group, visibleInputPins, input: true, x, y);
@@ -11857,7 +11905,7 @@ private void RefreshEndpointButtonSelection()
             var key = input ? GroupInputKey(group.Id, pin) : GroupOutputKey(group.Id, pin);
             _pinPositions[key] = new Point(
                 input ? VstCardInputPinX(x) : VstCardOutputPinX(x, VstGroupWidth),
-                VstCardPinY(y, row));
+                VstPluginCardPinY(y, row));
         }
     }
 
