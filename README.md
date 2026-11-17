@@ -18,6 +18,12 @@ marked *Pre-release* and are unsigned. After installing, restart VB-Audio Matrix
 picks up the "Elka FX Host" ASIO device, then set **ASIO Link > Buffer size** to match Matrix.
 FX Host checks this page for newer builds from its update menu.
 
+**Latest dev build (0.1.16):** smoother canvas with node VU meters on. Meters redraw only the
+cells that change and keep their levels when the canvas is rebuilt; selecting cables no longer
+rebuilds the canvas; cables stay attached while FX In/Out, VST and group nodes are dragged;
+and Delete removes a box selection of VSTs, groups and cables in one step (one Back step).
+Remove Cables and Ctrl+Delete still remove cables only.
+
 It is based on Elka VoiceMeeter FX Host and keeps its canvas, VST hosting, groups,
 sandboxed plugins, signal monitor, DSP diagnostics and save/load. The VoiceMeeter Remote
 API, the VoiceMeeter callback, ASIO Patch / Patch.insert and the delay workspace are
@@ -54,6 +60,7 @@ Settings > **Canvas Controls** (saved with the workspace):
 
 - **Box Selection** (on): drag on empty canvas to select nodes, groups, FX In/Out nodes and
   cables. Ctrl-drag adds to the selection, Esc cancels. Release opens the selection menu.
+  **Delete** (or the menu's **Delete Selection**) removes the selected VSTs, groups and cables.
   It works inside group editors too: select member VSTs and cables, drag a selected VST to
   move the selection together, or remove cables without removing VSTs.
 - **Automatic Grouping** (off): dropping a VST (or a browser/file drop) onto a VST or group

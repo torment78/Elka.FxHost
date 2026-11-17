@@ -10,6 +10,7 @@ namespace Elka.VoiceMeeterFxHost.App;
 public partial class MainWindow
 {
     private readonly List<(EndpointMeterAddress Address, EndpointMeterView View, EndpointPeakState Peak, EndpointPeakIndicator Indicator)> _endpointMeters = [];
+    private readonly Dictionary<EndpointMeterAddress, EndpointMeterView> _endpointMeterViewsForRebuild = [];
     private readonly Dictionary<(VoicemeeterKind Kind, EndpointMeterAddress Address), EndpointPeakState> _endpointPeakStates = [];
     private readonly float[] _endpointMeterPeaks = new float[8];
     private bool _endpointMetersInitialized;
@@ -118,11 +119,14 @@ public partial class MainWindow
             return;
         }
 
+        int stream = _vstCanvasMode == CallbackMode.Main || IsInputDirectOutputVstView()
+            ? 2 : mode == CallbackMode.Output ? 1 : 0;
+        var address = new EndpointMeterAddress(stream, outputSide, endpoint.Range.Start, endpoint.ChannelCount);
+        var hue = SignalMonitorHue(mode, endpoint, outputSide);
         double labelEdge = VstCardPinInset + EndpointPinLabelOffset + EndpointPinLabelWidth + EndpointMeterLabelGap;
-        var view = new EndpointMeterView(pinCount, SignalMonitorHue(mode, endpoint, outputSide))
-        {
-            Width = VstEndpointCardWidth - labelEdge - EndpointMeterOuterInset
-        };
+        var view = _endpointMeterViewsForRebuild.TryGetValue(address, out var previous) && previous.Matches(pinCount, hue)
+            ? previous : new EndpointMeterView(pinCount, hue);
+        view.Width = VstEndpointCardWidth - labelEdge - EndpointMeterOuterInset;
         Canvas.SetLeft(view, x + (outputSide ? labelEdge : EndpointMeterOuterInset));
         Canvas.SetTop(view, VstCardPinY(y, 0) - EndpointMeterView.RowHeight / 2);
         if (_settings.NodeVuMetersEnabled)
@@ -130,9 +134,6 @@ public partial class MainWindow
             RoutingCanvas.Children.Add(view);
             elements.Add(view);
         }
-        int stream = _vstCanvasMode == CallbackMode.Main || IsInputDirectOutputVstView()
-            ? 2 : mode == CallbackMode.Output ? 1 : 0;
-        var address = new EndpointMeterAddress(stream, outputSide, endpoint.Range.Start, endpoint.ChannelCount);
         var key = (_kind, address);
         if (!_endpointPeakStates.TryGetValue(key, out var peak))
             _endpointPeakStates[key] = peak = new EndpointPeakState();
@@ -155,11 +156,15 @@ public partial class MainWindow
     private void DrawEndpointMeterRow(IoEndpoint endpoint, CallbackMode mode, bool outputSide, int channel, int row,
         double x, double y, Border card, List<FrameworkElement> elements, bool withPeakIndicator)
     {
+        int stream = _vstCanvasMode == CallbackMode.Main || IsInputDirectOutputVstView()
+            ? 2 : mode == CallbackMode.Output ? 1 : 0;
+        var address = new EndpointMeterAddress(stream, outputSide, channel, 1);
+        var hue = SignalMonitorHue(mode, endpoint, outputSide);
         double labelEdge = VstCardPinInset + EndpointPinLabelOffset + EndpointPinLabelWidth + EndpointMeterLabelGap;
-        var view = new EndpointMeterView(1, SignalMonitorHue(mode, endpoint, outputSide))
-        {
-            Width = VstEndpointCardWidth - labelEdge - EndpointMeterOuterInset
-        };
+        // Keep the live meter (and its displayed level) across canvas rebuilds, as block meters do.
+        var view = _endpointMeterViewsForRebuild.TryGetValue(address, out var previous) && previous.Matches(1, hue)
+            ? previous : new EndpointMeterView(1, hue);
+        view.Width = VstEndpointCardWidth - labelEdge - EndpointMeterOuterInset;
         Canvas.SetLeft(view, x + (outputSide ? labelEdge : EndpointMeterOuterInset));
         Canvas.SetTop(view, VstCardPinY(y, row) - EndpointMeterView.RowHeight / 2);
         if (_settings.NodeVuMetersEnabled)
@@ -167,9 +172,6 @@ public partial class MainWindow
             RoutingCanvas.Children.Add(view);
             elements.Add(view);
         }
-        int stream = _vstCanvasMode == CallbackMode.Main || IsInputDirectOutputVstView()
-            ? 2 : mode == CallbackMode.Output ? 1 : 0;
-        var address = new EndpointMeterAddress(stream, outputSide, channel, 1);
         var key = (_kind, address);
         if (!_endpointPeakStates.TryGetValue(key, out var peak))
             _endpointPeakStates[key] = peak = new EndpointPeakState();
